@@ -1,0 +1,214 @@
+---
+import LinkList from '../components/LinkList.astro';
+import { scenes, type YearMonth } from '../content/scenes';
+
+const monthFormat = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+const formatYearMonth = (ym: YearMonth) => monthFormat.format(new Date(`${ym}-01T00:00:00Z`));
+
+const contactId = scenes.find((s) => s.kind === 'contact')?.id;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Calen Gruber | Portfolio</title>
+    <meta name="description" content="Calen Gruber's portfolio: roles, projects and how to get in touch." />
+    <meta name="robots" content="noindex" />
+  </head>
+  <body>
+    <header class="site-header">
+      {contactId && <a class="skip-link" href={`#${contactId}`}>Skip to contact</a>}
+      <a href="#">Résumé</a>
+    </header>
+    <main>
+      {
+        scenes.map((scene) => (
+          <section id={scene.id} class={`scene scene-${scene.kind}`} aria-labelledby={`${scene.id}-heading`}>
+            {scene.kind === 'intro' && (
+              <>
+                <h1 id={`${scene.id}-heading`}>{scene.name}</h1>
+                <p class="tagline">{scene.tagline}</p>
+              </>
+            )}
+            {scene.kind === 'role' && (
+              <>
+                <p class="eyebrow">Role</p>
+                <h2 id={`${scene.id}-heading`}>{scene.title}</h2>
+                <p class="meta">
+                  {scene.org},{' '}
+                  <time datetime={scene.start}>{formatYearMonth(scene.start)}</time> to{' '}
+                  {scene.end === 'present' ? 'present' : <time datetime={scene.end}>{formatYearMonth(scene.end)}</time>}
+                </p>
+                <p>{scene.summary}</p>
+                <ul>
+                  {scene.highlights.map((h) => (
+                    <li>{h}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {scene.kind === 'project' && (
+              <>
+                <p class="eyebrow">Project</p>
+                <h2 id={`${scene.id}-heading`}>{scene.title}</h2>
+                <p class="meta">
+                  <time datetime={String(scene.year)}>{scene.year}</time>
+                </p>
+                <p>{scene.summary}</p>
+                <LinkList links={scene.links} />
+              </>
+            )}
+            {scene.kind === 'contact' && (
+              <>
+                <h2 id={`${scene.id}-heading`}>Contact</h2>
+                <p>
+                  <a href={`mailto:${scene.email}`}>{scene.email}</a>
+                </p>
+                <LinkList links={scene.links} />
+              </>
+            )}
+          </section>
+        ))
+      }
+    </main>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    --space-0: #05060f;
+    --space-1: #0d1024;
+    --star: #e8ebff;
+    --dust: #a3a9cc;
+    --nebula: #9d8cff;
+    --nebula-bright: #c4b8ff;
+    --gutter: max(16px, 4vw);
+    --measure: 40rem;
+    color-scheme: dark;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: radial-gradient(ellipse at top, var(--space-1), var(--space-0) 70%) fixed var(--space-0);
+    color: var(--star);
+    font-family:
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      Roboto,
+      'Helvetica Neue',
+      Arial,
+      sans-serif;
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  a {
+    color: var(--nebula-bright);
+    text-underline-offset: 0.2em;
+    transition: color 150ms ease;
+  }
+
+  a:hover {
+    color: var(--star);
+  }
+
+  a:focus-visible {
+    outline: 2px solid var(--nebula);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  .site-header {
+    display: flex;
+    justify-content: flex-end;
+    padding: 1rem var(--gutter);
+  }
+
+  .skip-link {
+    position: absolute;
+    left: var(--gutter);
+    top: 1rem;
+    transform: translateY(-200%);
+    background: var(--space-1);
+    padding: 0.25rem 0.5rem;
+  }
+
+  .skip-link:focus {
+    transform: none;
+  }
+
+  main {
+    padding-inline: var(--gutter);
+  }
+
+  .scene {
+    max-width: var(--measure);
+    margin-inline: auto;
+    padding-block: clamp(3rem, 12vh, 8rem);
+    overflow-wrap: anywhere;
+  }
+
+  .scene + .scene {
+    border-top: 1px solid color-mix(in srgb, var(--dust) 20%, transparent);
+  }
+
+  h1,
+  h2 {
+    line-height: 1.15;
+    margin: 0 0 0.5rem;
+  }
+
+  h1 {
+    font-size: clamp(2.5rem, 9vw, 4.5rem);
+    letter-spacing: -0.02em;
+  }
+
+  h2 {
+    font-size: clamp(1.75rem, 5vw, 2.5rem);
+  }
+
+  .tagline {
+    font-size: 1.25rem;
+    color: var(--dust);
+  }
+
+  .eyebrow {
+    margin: 0 0 0.25rem;
+    font-size: 0.8125rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--nebula);
+  }
+
+  .meta {
+    margin-top: 0;
+    color: var(--dust);
+  }
+
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    padding: 0;
+    list-style: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition: none !important;
+    }
+  }
+</style>
