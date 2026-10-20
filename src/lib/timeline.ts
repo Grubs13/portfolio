@@ -8,9 +8,11 @@ const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const smoothstep = (x: number) => x * x * (3 - 2 * x);
 
 /**
- * Splits scroll progress into `sceneCount` equal dwell windows with equal
- * travel segments between them. `dwellShare` is the fraction of total
- * progress spent dwelling, summed across all scenes.
+ * Places scene i at progress i / (sceneCount - 1) and centers a dwell window
+ * on it, with travel segments between neighbouring windows. The first and last
+ * scenes get half a window each, since progress cannot go past them.
+ * `dwellShare` is the fraction of total progress spent dwelling, summed across
+ * all scenes.
  */
 export function timeline(
   progress: number,
@@ -25,19 +27,17 @@ export function timeline(
   }
   if (sceneCount === 1) return { phase: 'dwell', scene: 0 };
 
-  const p = clamp01(progress);
-  const dwell = dwellShare / sceneCount;
-  const travel = (1 - dwellShare) / (sceneCount - 1);
-  const period = dwell + travel;
-  // Float error can push p / period past the last index at p = 1.
-  const scene = Math.min(Math.floor(p / period), sceneCount - 1);
-  const local = p - scene * period;
+  const s = clamp01(progress) * (sceneCount - 1);
+  const from = Math.min(Math.floor(s), sceneCount - 1);
+  const local = s - from;
+  const half = dwellShare / 2;
 
-  if (scene === sceneCount - 1 || local <= dwell) return { phase: 'dwell', scene };
+  if (local <= half) return { phase: 'dwell', scene: from };
+  if (local >= 1 - half) return { phase: 'dwell', scene: from + 1 };
   return {
     phase: 'travel',
-    from: scene,
-    to: scene + 1,
-    t: smoothstep(clamp01((local - dwell) / travel)),
+    from,
+    to: from + 1,
+    t: smoothstep((local - half) / (1 - dwellShare)),
   };
 }
