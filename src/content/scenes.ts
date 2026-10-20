@@ -3,9 +3,6 @@ export interface Link {
   href: string;
 }
 
-type Month = '01' | '02' | '03' | '04' | '05' | '06' | '07' | '08' | '09' | '10' | '11' | '12';
-export type YearMonth = `${number}-${Month}`;
-
 interface SceneBase {
   id: string;
 }
@@ -20,8 +17,6 @@ export interface RoleScene extends SceneBase {
   kind: 'role';
   title: string;
   org: string;
-  start: YearMonth;
-  end: YearMonth | 'present';
   summary: string;
   highlights: string[];
 }
@@ -29,9 +24,16 @@ export interface RoleScene extends SceneBase {
 export interface ProjectScene extends SceneBase {
   kind: 'project';
   title: string;
-  year: number;
+  org: string;
   summary: string;
   links: Link[];
+}
+
+export interface InterestScene extends SceneBase {
+  kind: 'interest';
+  title: string;
+  summary: string;
+  topics: string[];
 }
 
 export interface ContactScene extends SceneBase {
@@ -40,61 +42,56 @@ export interface ContactScene extends SceneBase {
   links: Link[];
 }
 
-export type Scene = IntroScene | RoleScene | ProjectScene | ContactScene;
+export type Scene = IntroScene | RoleScene | ProjectScene | InterestScene | ContactScene;
+
+const CARSELAND = 'Nutrien, Carseland Nitrogen Operations';
 
 export const scenes: readonly Scene[] = [
   {
     kind: 'intro',
     id: 'intro',
     name: 'Calen Gruber',
-    tagline: 'Placeholder tagline about building software.',
+    tagline: 'Mechanical engineer working in reliability and operations at a nitrogen fertilizer plant.',
   },
   {
     kind: 'role',
-    id: 'company-b',
-    title: 'Senior Engineer',
-    org: 'Company B',
-    start: '2024-03',
-    end: 'present',
-    summary: 'Placeholder summary of the work at Company B.',
-    highlights: ['Placeholder highlight one.', 'Placeholder highlight two.'],
-  },
-  {
-    kind: 'role',
-    id: 'company-a',
-    title: 'Software Engineer',
-    org: 'Company A',
-    start: '2021-06',
-    end: '2024-02',
-    summary: 'Placeholder summary of the work at Company A.',
-    highlights: ['Placeholder highlight one.', 'Placeholder highlight two.'],
-  },
-  {
-    kind: 'project',
-    id: 'project-x',
-    title: 'Project X',
-    year: 2025,
-    summary: 'Placeholder summary of Project X.',
-    links: [{ label: 'Source', href: '#' }],
-  },
-  {
-    kind: 'project',
-    id: 'project-y',
-    title: 'Project Y',
-    year: 2023,
-    summary: 'Placeholder summary of Project Y.',
-    links: [
-      { label: 'Live site', href: '#' },
-      { label: 'Source', href: '#' },
+    id: 'reliability-engineer',
+    title: 'Reliability Engineer',
+    org: CARSELAND,
+    summary: "Managed the site's reliability programs.",
+    highlights: [
+      "Developed and ran the site's flange management program during turnarounds.",
+      'Led inspections and repair plans for all maintenance refractory scope on the reformer during the turnaround.',
     ],
+  },
+  {
+    kind: 'project',
+    id: 'reformer-reharp',
+    title: 'Kellogg Reformer Re-harp and Convection Coil Replacement',
+    org: CARSELAND,
+    summary:
+      'Lead mechanical engineer on one of the largest projects of the turnaround, executed on the critical path.',
+    links: [],
+  },
+  {
+    kind: 'role',
+    id: 'ammonia-operations-engineer',
+    title: 'Ammonia Operations Engineer',
+    org: CARSELAND,
+    summary: 'Supported operations of the ammonia plant.',
+    highlights: ['Provided technical support to reach target debottleneck rates after the expansion project.'],
+  },
+  {
+    kind: 'interest',
+    id: 'technical-interests',
+    title: 'Technical Interests',
+    summary: 'Placeholder: using AI and new technology to make plant engineering work faster, safer and more reliable.',
+    topics: ['Placeholder topic one.', 'Placeholder topic two.'],
   },
   {
     kind: 'contact',
     id: 'contact',
     email: 'hello@example.com',
-    links: [
-      { label: 'GitHub', href: 'https://github.com/Grubs13' },
-      { label: 'LinkedIn', href: '#' },
-    ],
+    links: [{ label: 'LinkedIn', href: '#' }],
   },
 ];

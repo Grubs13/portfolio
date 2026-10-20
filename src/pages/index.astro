@@ -1,9 +1,6 @@
 ---
 import LinkList from '../components/LinkList.astro';
-import { scenes, type YearMonth } from '../content/scenes';
-
-const monthFormat = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
-const formatYearMonth = (ym: YearMonth) => monthFormat.format(new Date(`${ym}-01T00:00:00Z`));
+import { scenes } from '../content/scenes';
 
 const contactId = scenes.find((s) => s.kind === 'contact')?.id;
 ---
@@ -14,8 +11,8 @@ const contactId = scenes.find((s) => s.kind === 'contact')?.id;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
-    <title>Calen Gruber | Portfolio</title>
-    <meta name="description" content="Calen Gruber's portfolio: roles, projects and how to get in touch." />
+    <title>Calen Gruber | Mechanical Engineer</title>
+    <meta name="description" content="Calen Gruber, mechanical engineer: reliability and operations roles, projects and how to get in touch." />
     <meta name="robots" content="noindex" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -40,11 +37,7 @@ const contactId = scenes.find((s) => s.kind === 'contact')?.id;
               <>
                 <p class="eyebrow">Role</p>
                 <h2 id={`${scene.id}-heading`}>{scene.title}</h2>
-                <p class="meta">
-                  {scene.org},{' '}
-                  <time datetime={scene.start}>{formatYearMonth(scene.start)}</time> to{' '}
-                  {scene.end === 'present' ? 'present' : <time datetime={scene.end}>{formatYearMonth(scene.end)}</time>}
-                </p>
+                <p class="meta">{scene.org}</p>
                 <p>{scene.summary}</p>
                 <ul>
                   {scene.highlights.map((h) => (
@@ -57,11 +50,21 @@ const contactId = scenes.find((s) => s.kind === 'contact')?.id;
               <>
                 <p class="eyebrow">Project</p>
                 <h2 id={`${scene.id}-heading`}>{scene.title}</h2>
-                <p class="meta">
-                  <time datetime={String(scene.year)}>{scene.year}</time>
-                </p>
+                <p class="meta">{scene.org}</p>
                 <p>{scene.summary}</p>
-                <LinkList links={scene.links} />
+                {scene.links.length > 0 && <LinkList links={scene.links} />}
+              </>
+            )}
+            {scene.kind === 'interest' && (
+              <>
+                <p class="eyebrow">Interests</p>
+                <h2 id={`${scene.id}-heading`}>{scene.title}</h2>
+                <p>{scene.summary}</p>
+                <ul>
+                  {scene.topics.map((t) => (
+                    <li>{t}</li>
+                  ))}
+                </ul>
               </>
             )}
             {scene.kind === 'contact' && (
