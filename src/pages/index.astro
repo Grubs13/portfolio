@@ -17,8 +17,17 @@ const contactId = scenes.find((s) => s.kind === 'contact')?.id;
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <script is:inline>
+      if (
+        !matchMedia('(prefers-reduced-motion: reduce)').matches &&
+        !(navigator.connection && navigator.connection.saveData) &&
+        'WebGLRenderingContext' in window
+      )
+        document.documentElement.classList.add('world');
+    </script>
   </head>
   <body>
+    <canvas class="world-canvas" aria-hidden="true"></canvas>
     <header class="site-header">
       {contactId && <a class="skip-link" href={`#${contactId}`}>Skip to contact</a>}
       <a href="#">Résumé</a>
@@ -27,59 +36,64 @@ const contactId = scenes.find((s) => s.kind === 'contact')?.id;
       {
         scenes.map((scene) => (
           <section id={scene.id} class={`scene scene-${scene.kind}`} aria-labelledby={`${scene.id}-heading`}>
-            {scene.kind === 'intro' && (
-              <>
-                <h1 id={`${scene.id}-heading`}>{scene.name}</h1>
-                <p class="tagline">{scene.tagline}</p>
-              </>
-            )}
-            {scene.kind === 'role' && (
-              <>
-                <p class="eyebrow">Role</p>
-                <h2 id={`${scene.id}-heading`}>{scene.title}</h2>
-                <p class="meta">{scene.org}</p>
-                <p>{scene.summary}</p>
-                <ul>
-                  {scene.highlights.map((h) => (
-                    <li>{h}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {scene.kind === 'project' && (
-              <>
-                <p class="eyebrow">Project</p>
-                <h2 id={`${scene.id}-heading`}>{scene.title}</h2>
-                <p class="meta">{scene.org}</p>
-                <p>{scene.summary}</p>
-                {scene.links.length > 0 && <LinkList links={scene.links} />}
-              </>
-            )}
-            {scene.kind === 'interest' && (
-              <>
-                <p class="eyebrow">Interests</p>
-                <h2 id={`${scene.id}-heading`}>{scene.title}</h2>
-                <p>{scene.summary}</p>
-                <ul>
-                  {scene.topics.map((t) => (
-                    <li>{t}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {scene.kind === 'contact' && (
-              <>
-                <h2 id={`${scene.id}-heading`}>Contact</h2>
-                <p>
-                  <a href={`mailto:${scene.email}`}>{scene.email}</a>
-                </p>
-                <LinkList links={scene.links} />
-              </>
-            )}
+            <div class="panel">
+              {scene.kind === 'intro' && (
+                <>
+                  <h1 id={`${scene.id}-heading`}>{scene.name}</h1>
+                  <p class="tagline">{scene.tagline}</p>
+                </>
+              )}
+              {scene.kind === 'role' && (
+                <>
+                  <p class="eyebrow">Role</p>
+                  <h2 id={`${scene.id}-heading`}>{scene.title}</h2>
+                  <p class="meta">{scene.org}</p>
+                  <p>{scene.summary}</p>
+                  <ul>
+                    {scene.highlights.map((h) => (
+                      <li>{h}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {scene.kind === 'project' && (
+                <>
+                  <p class="eyebrow">Project</p>
+                  <h2 id={`${scene.id}-heading`}>{scene.title}</h2>
+                  <p class="meta">{scene.org}</p>
+                  <p>{scene.summary}</p>
+                  {scene.links.length > 0 && <LinkList links={scene.links} />}
+                </>
+              )}
+              {scene.kind === 'interest' && (
+                <>
+                  <p class="eyebrow">Interests</p>
+                  <h2 id={`${scene.id}-heading`}>{scene.title}</h2>
+                  <p>{scene.summary}</p>
+                  <ul>
+                    {scene.topics.map((t) => (
+                      <li>{t}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {scene.kind === 'contact' && (
+                <>
+                  <h2 id={`${scene.id}-heading`}>Contact</h2>
+                  <p>
+                    <a href={`mailto:${scene.email}`}>{scene.email}</a>
+                  </p>
+                  <LinkList links={scene.links} />
+                </>
+              )}
+            </div>
           </section>
         ))
       }
     </main>
+    <script>
+      import '../world/boot';
+    </script>
   </body>
 </html>
 
@@ -208,6 +222,67 @@ const contactId = scenes.find((s) => s.kind === 'contact')?.id;
     gap: 0.5rem 1.5rem;
     padding: 0;
     list-style: none;
+  }
+
+  .world-canvas {
+    display: none;
+  }
+
+  .world {
+    --panel: rgb(5 6 15 / 0.86);
+    --world-focus-y: 0.27;
+  }
+
+  .world .world-canvas {
+    display: block;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 600ms ease;
+  }
+
+  .world-ready .world-canvas {
+    opacity: 1;
+  }
+
+  .world .site-header,
+  .world main {
+    position: relative;
+  }
+
+  .world .scene {
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding-block: 1.5rem;
+  }
+
+  .world .scene + .scene {
+    border-top: 0;
+  }
+
+  .world .panel {
+    padding: clamp(1.25rem, 4vw, 2rem);
+    border: 1px solid color-mix(in srgb, var(--dust) 18%, transparent);
+    border-radius: 12px;
+    background: var(--panel);
+  }
+
+  @media (min-width: 900px) {
+    .world {
+      --world-beside: 1;
+      --world-focus-y: 0.5;
+    }
+
+    .world .scene {
+      justify-content: center;
+      max-width: min(var(--measure), 46vw);
+      margin-inline: 0;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
