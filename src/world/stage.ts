@@ -1,15 +1,10 @@
 import {
-  BoxGeometry,
   BufferGeometry,
-  CylinderGeometry,
   DirectionalLight,
   Float32BufferAttribute,
-  Group,
+  type Group,
   HemisphereLight,
-  IcosahedronGeometry,
-  Mesh,
-  MeshLambertMaterial,
-  type Object3D,
+  type Mesh,
   OrthographicCamera,
   Points,
   PointsMaterial,
@@ -19,7 +14,10 @@ import {
 } from 'three';
 import type { Scene } from '../content/scenes';
 import type { TimelineState } from '../lib/timeline';
-import { ISLAND_RADIUS, pointOnSegment, segmentTangent, type Vec3, type WorldLayout } from './layout';
+import { islandFor } from './art';
+import { box, group, mesh } from './art/kit';
+import { palette, type PaletteMaterial } from './art/palette';
+import { pointOnSegment, segmentTangent, type Vec3, type WorldLayout } from './layout';
 
 /** Where on screen the subject is framed, as fractions of width and of height from the top. */
 export interface Focus {
@@ -34,12 +32,6 @@ export interface Stage {
   render(state: TimelineState): void;
 }
 
-interface Materials {
-  dark: MeshLambertMaterial;
-  mid: MeshLambertMaterial;
-  light: MeshLambertMaterial;
-}
-
 const ISO_DIRECTION = new Vector3(1, 1, 1).normalize();
 const CAMERA_DISTANCE = 100;
 /** World units that must fit across the free part of the screen. */
@@ -51,47 +43,6 @@ const IDLE_YAW = Math.PI / 4;
 const LEAN = 0.45;
 const SWINGS_PER_TRAVEL = 3;
 
-const box = new BoxGeometry(1, 1, 1);
-const islandRock = new CylinderGeometry(ISLAND_RADIUS, 1.2, 2, 7);
-const platformRock = new CylinderGeometry(1.8, 1, 0.8, 6);
-const orb = new IcosahedronGeometry(1, 0);
-
-function mesh(
-  geometry: BufferGeometry,
-  material: MeshLambertMaterial,
-  [x, y, z]: [number, number, number],
-  [sx, sy, sz]: [number, number, number] = [1, 1, 1],
-): Mesh {
-  const m = new Mesh(geometry, material);
-  m.position.set(x, y, z);
-  m.scale.set(sx, sy, sz);
-  return m;
-}
-
-function group(...children: Object3D[]): Group {
-  const g = new Group();
-  g.add(...children);
-  return g;
-}
-
-const island = (m: Materials) => mesh(islandRock, m.dark, [0, -1, 0]);
-const platform = (m: Materials) => mesh(platformRock, m.dark, [0, -0.4, 0]);
-
-// Props sit toward -x, to the character's screen-left, so they never hide it or sit on its head.
-const ISLANDS: Record<Scene['kind'], (m: Materials) => Object3D> = {
-  intro: platform,
-  contact: platform,
-  role: (m) =>
-    group(
-      island(m),
-      mesh(box, m.mid, [-1.7, 0.6, 0.3], [1.2, 1.2, 1.2]),
-      mesh(box, m.light, [-1.2, 0.4, -1.1], [0.8, 0.8, 0.8]),
-      mesh(box, m.mid, [-1.8, 1.5, 0.1], [0.7, 0.6, 0.7]),
-    ),
-  project: (m) => group(island(m), mesh(box, m.mid, [-1.7, 2, 0.2], [1.2, 4, 1.2])),
-  interest: (m) => group(island(m), mesh(orb, m.light, [-1.7, 1.6, 0.4])),
-};
-
 interface Character {
   root: Group;
   body: Group;
@@ -101,23 +52,23 @@ interface Character {
 }
 
 /** A limb hangs from a pivot at its top so rotating the pivot swings it. */
-function limb(material: MeshLambertMaterial, x: number, y: number, length: number, width: number): Group {
+function limb(material: PaletteMaterial, x: number, y: number, length: number, width: number): Group {
   const pivot = group(mesh(box, material, [0, -length / 2, 0], [width, length, width]));
   pivot.position.set(x, y, 0);
   return pivot;
 }
 
-function buildCharacter(m: Materials): Character {
-  const arms: [Group, Group] = [limb(m.mid, -0.42, 0.95, 0.65, 0.2), limb(m.mid, 0.42, 0.95, 0.65, 0.2)];
-  const legs: [Group, Group] = [limb(m.mid, -0.16, 0.2, 0.75, 0.24), limb(m.mid, 0.16, 0.2, 0.75, 0.24)];
-  const flame = mesh(box, m.light, [0, -0.35, 0], [0.22, 0.7, 0.22]);
+function buildCharacter(): Character {
+  const arms: [Group, Group] = [limb(palette.grey, -0.42, 0.95, 0.65, 0.2), limb(palette.grey, 0.42, 0.95, 0.65, 0.2)];
+  const legs: [Group, Group] = [limb(palette.grey, -0.16, 0.2, 0.75, 0.24), limb(palette.grey, 0.16, 0.2, 0.75, 0.24)];
+  const flame = mesh(box, palette.greyLight, [0, -0.35, 0], [0.22, 0.7, 0.22]);
   const nozzle = group(flame);
   nozzle.position.set(0, 0.3, -0.42);
   const body = group(
-    mesh(box, m.mid, [0, 0.6, 0], [0.6, 0.8, 0.4]),
-    mesh(box, m.light, [0, 1.3, 0], [0.5, 0.5, 0.5]),
-    mesh(box, m.dark, [0, 1.32, 0.24], [0.38, 0.18, 0.06]),
-    mesh(box, m.dark, [0, 0.65, -0.32], [0.5, 0.65, 0.25]),
+    mesh(box, palette.grey, [0, 0.6, 0], [0.6, 0.8, 0.4]),
+    mesh(box, palette.greyLight, [0, 1.3, 0], [0.5, 0.5, 0.5]),
+    mesh(box, palette.greyDark, [0, 1.32, 0.24], [0.38, 0.18, 0.06]),
+    mesh(box, palette.greyDark, [0, 0.65, -0.32], [0.5, 0.65, 0.25]),
     nozzle,
     ...arms,
     ...legs,
@@ -198,12 +149,6 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
   });
   renderer.setClearColor(0x000000, 0);
 
-  const materials: Materials = {
-    dark: new MeshLambertMaterial({ color: 0x4a4e58, flatShading: true }),
-    mid: new MeshLambertMaterial({ color: 0x7a7f8a, flatShading: true }),
-    light: new MeshLambertMaterial({ color: 0xa9adb6, flatShading: true }),
-  };
-
   const world = new ThreeScene();
   world.add(new HemisphereLight(0xdfe3ff, 0x1a1c2a, 1.6));
   const sun = new DirectionalLight(0xffffff, 2.2);
@@ -212,13 +157,13 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
 
   scenes.forEach((scene, i) => {
     const anchor = layout.anchors[i]!;
-    const islandObject = ISLANDS[scene.kind](materials);
+    const islandObject = islandFor(scene)();
     islandObject.position.set(anchor.x, anchor.y, anchor.z);
     world.add(islandObject);
   });
   world.add(buildStars(layout, new PointsMaterial({ color: 0xc8ccd6, size: 1.6, sizeAttenuation: false })));
 
-  const character = buildCharacter(materials);
+  const character = buildCharacter();
   world.add(character.root);
 
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, CAMERA_DISTANCE * 5);
