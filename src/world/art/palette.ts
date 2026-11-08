@@ -7,7 +7,7 @@ export const palette = {
   greyDark: flat(0x4a4e58),
   grey: flat(0x7a7f8a),
   greyLight: flat(0xa9adb6),
-  concrete: flat(0x8e929b),
+  concrete: flat(0x7f838c),
   steel: flat(0x66707f),
   steelDark: flat(0x343a46),
   refractory: flat(0xb0573a),
