@@ -1,9 +1,10 @@
 import {
   BufferGeometry,
-  CircleGeometry,
   DepthTexture,
   Float32BufferAttribute,
   LinearSRGBColorSpace,
+  Matrix4,
+  MeshBasicMaterial,
   Mesh,
   NearestFilter,
   OrthographicCamera,
@@ -16,9 +17,9 @@ import {
 } from 'three';
 import type { Scene } from '../content/scenes';
 import type { TimelineState } from '../lib/timeline';
-import { islandFor } from './art';
+import { stageFor } from './art';
 import { buildCharacter, type Character } from './art/character';
-import { blobShadowMaterial, outlineMaterial } from './art/materials';
+import { outlineMaterial, shadowUniforms, SUN } from './art/materials';
 import { pointOnSegment, segmentTangent, type Vec3, type WorldLayout } from './layout';
 
 /** Where on screen the subject is framed, as fractions of width and of height from the top. */
@@ -37,7 +38,7 @@ export interface Stage {
 const ISO_DIRECTION = new Vector3(1, 1, 1).normalize();
 const CAMERA_DISTANCE = 100;
 /** World units that must fit across the free part of the screen. */
-const FRAME = 10;
+const FRAME = 16;
 const LOOK_HEIGHT = 1;
 const TRAVEL_ZOOM_OUT = 0.3;
 /** A three-quarter view: turned from the camera, which looks from +x +z, so one side shows. */
@@ -50,6 +51,14 @@ const NEAR = 0.1;
 const FAR = CAMERA_DISTANCE * 5;
 /** Depth steps smaller than this many art pixels are surface slope, not a silhouette. */
 const OUTLINE_PIXELS = 3;
+/** Half the width of ground the shadow map covers around the character, and its resolution. */
+const SHADOW_REACH = 36;
+const SHADOW_SIZE = 1024;
+const SHADOW_DEPTH = 300;
+/** Stars sit on their own layer so they cast no shadows. */
+const SKY_LAYER = 1;
+/** Maps clip space to texture space, so the shader can look up the shadow map. */
+const TO_TEXTURE = new Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
 
 function buildStars(layout: WorldLayout, material: PointsMaterial): Points {
   const lo = new Vector3(Infinity, Infinity, Infinity);
@@ -58,13 +67,13 @@ function buildStars(layout: WorldLayout, material: PointsMaterial): Points {
     lo.min(new Vector3(a.x, a.y, a.z));
     hi.max(new Vector3(a.x, a.y, a.z));
   }
-  const margin = 45;
+  const margin = 120;
   // A fixed seed keeps the sky identical between visits and screenshots.
   let seed = 7;
   const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const behind = ISO_DIRECTION.clone().multiplyScalar(-90);
+  const behind = ISO_DIRECTION.clone().multiplyScalar(-150);
   const positions: number[] = [];
-  for (let i = 0; i < 900; i++) {
+  for (let i = 0; i < 2500; i++) {
     positions.push(
       lo.x - margin + random() * (hi.x - lo.x + 2 * margin) + behind.x,
       lo.y - margin + random() * (hi.y - lo.y + 2 * margin) + behind.y,
@@ -112,6 +121,22 @@ function poseCharacter(c: Character, layout: WorldLayout, state: TimelineState):
   return p;
 }
 
+const right = new Vector3();
+const up = new Vector3();
+
+/** Points `camera` at `target` from `distance` along `direction`, shifted to the nearest multiple of `unit` across its view. */
+function aimSnapped(camera: OrthographicCamera, target: Vector3, direction: Vector3, distance: number, unit: number) {
+  camera.position.copy(target).addScaledVector(direction, distance);
+  camera.lookAt(target);
+  camera.updateMatrixWorld();
+  right.setFromMatrixColumn(camera.matrixWorld, 0);
+  up.setFromMatrixColumn(camera.matrixWorld, 1);
+  const r = camera.position.dot(right);
+  const u = camera.position.dot(up);
+  camera.position.addScaledVector(right, Math.round(r / unit) * unit - r).addScaledVector(up, Math.round(u / unit) * unit - u);
+  camera.updateMatrixWorld();
+}
+
 export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[], layout: WorldLayout): Stage {
   // The world renders at art-pixel resolution into a target, the outline pass
   // writes that same resolution to the canvas, and CSS scales the canvas up
@@ -128,16 +153,24 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
   const world = new ThreeScene();
   scenes.forEach((scene, i) => {
     const anchor = layout.anchors[i]!;
-    const islandObject = islandFor(scene)();
-    islandObject.position.set(anchor.x, anchor.y, anchor.z);
-    world.add(islandObject);
+    const stageObject = stageFor(scene)();
+    stageObject.position.set(anchor.x, anchor.y, anchor.z);
+    world.add(stageObject);
   });
   // Stars write no depth, so the outline pass treats them as sky.
-  world.add(buildStars(layout, new PointsMaterial({ color: 0xd9dcf2, size: 1, sizeAttenuation: false, depthWrite: false })));
+  const stars = buildStars(layout, new PointsMaterial({ color: 0xd9dcf2, size: 1, sizeAttenuation: false, depthWrite: false }));
+  stars.layers.set(SKY_LAYER);
+  world.add(stars);
 
   const character = buildCharacter();
-  const shadow = new Mesh(new CircleGeometry(0.42, 10).rotateX(-Math.PI / 2), blobShadowMaterial);
-  world.add(character.root, shadow);
+  world.add(character.root);
+
+  // Sunlight shadows come from a depth map rendered from the sun, centered on the character.
+  const sunCamera = new OrthographicCamera(-SHADOW_REACH, SHADOW_REACH, SHADOW_REACH, -SHADOW_REACH, 1, SHADOW_DEPTH);
+  const shadowTarget = new WebGLRenderTarget(SHADOW_SIZE, SHADOW_SIZE, { depthTexture: new DepthTexture(SHADOW_SIZE, SHADOW_SIZE) });
+  const depthOnly = new MeshBasicMaterial({ colorWrite: false });
+  shadowUniforms.tShadow.value = shadowTarget.depthTexture;
+  shadowUniforms.shadowBias.value = (2.5 * (2 * SHADOW_REACH)) / SHADOW_SIZE / (SHADOW_DEPTH - 1);
 
   const post = new ThreeScene();
   const triangle = new BufferGeometry();
@@ -149,9 +182,8 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
   outlineMaterial.uniforms.tDepth!.value = target.depthTexture;
 
   const camera = new OrthographicCamera(-1, 1, 1, -1, NEAR, FAR);
+  camera.layers.enable(SKY_LAYER);
   const look = new Vector3();
-  const right = new Vector3();
-  const up = new Vector3();
   let aspect = 1;
   let rows = 1;
   let focus: Focus = { x: 0.5, y: 0.5 };
@@ -173,8 +205,6 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
 
     render(state) {
       const subject = poseCharacter(character, layout, state);
-      shadow.visible = state.phase === 'dwell';
-      shadow.position.set(subject.x, subject.y + 0.01, subject.z);
 
       const zoom = state.phase === 'travel' ? 1 + TRAVEL_ZOOM_OUT * Math.sin(Math.PI * state.t) : 1;
       // The free part of the screen is the largest band centered on `focus` along each axis.
@@ -189,19 +219,20 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
       camera.updateProjectionMatrix();
 
       look.set(subject.x, subject.y + LOOK_HEIGHT, subject.z);
-      camera.position.copy(look).addScaledVector(ISO_DIRECTION, CAMERA_DISTANCE);
-      camera.lookAt(look);
-      // Snapping the camera to whole art pixels keeps still geometry from shimmering as it pans.
       const unit = viewHeight / rows;
-      camera.updateMatrixWorld();
-      right.setFromMatrixColumn(camera.matrixWorld, 0);
-      up.setFromMatrixColumn(camera.matrixWorld, 1);
-      const r = camera.position.dot(right);
-      const u = camera.position.dot(up);
-      camera.position
-        .addScaledVector(right, Math.round(r / unit) * unit - r)
-        .addScaledVector(up, Math.round(u / unit) * unit - u);
-      camera.updateMatrixWorld();
+      // Snapped to whole art pixels, so still geometry does not shimmer as the camera pans.
+      aimSnapped(camera, look, ISO_DIRECTION, CAMERA_DISTANCE, unit);
+      // Snapped to whole shadow texels, so shadow edges hold still too.
+      aimSnapped(sunCamera, look, SUN, SHADOW_DEPTH / 2, (2 * SHADOW_REACH) / SHADOW_SIZE);
+      shadowUniforms.shadowMatrix.value
+        .copy(TO_TEXTURE)
+        .multiply(sunCamera.projectionMatrix)
+        .multiply(sunCamera.matrixWorldInverse);
+
+      world.overrideMaterial = depthOnly;
+      renderer.setRenderTarget(shadowTarget);
+      renderer.render(world, sunCamera);
+      world.overrideMaterial = null;
 
       outlineMaterial.uniforms.threshold!.value = (OUTLINE_PIXELS * unit) / (FAR - NEAR);
       renderer.setRenderTarget(target);

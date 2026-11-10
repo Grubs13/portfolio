@@ -1,8 +1,8 @@
 import { Box3, Mesh, type Object3D, Triangle, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { type Scene, scenes } from '../../content/scenes';
-import { ISLAND_RADIUS, layoutScenes, pointOnSegment } from '../layout';
-import { islandFor, SCENE_ART } from '.';
+import { STAGE_RADIUS, layoutScenes, pointOnSegment } from '../layout';
+import { stageFor, SCENE_ART } from '.';
 import { PLACEHOLDERS } from './placeholders';
 
 // Generous bounds of the character in any travel pose, measured from its feet.
@@ -46,26 +46,26 @@ describe('scene art', () => {
   it('uses a scene’s own art and falls back to the kind placeholder without it', () => {
     const withArt = scenes.find((s) => s.id === 'reformer-reharp')!;
     const without: Scene = { ...withArt, id: 'no-art-yet' };
-    expect(islandFor(withArt)).toBe(SCENE_ART['reformer-reharp']);
-    expect(islandFor(without)).toBe(PLACEHOLDERS[without.kind]);
+    expect(stageFor(withArt)).toBe(SCENE_ART['reformer-reharp']);
+    expect(stageFor(without)).toBe(PLACEHOLDERS[without.kind]);
   });
 
-  it.each(scenes.map((s) => [s.id, s] as const))('keeps the %s island within ISLAND_RADIUS of its anchor', (_, scene) => {
-    expect(horizontalReach(islandFor(scene)())).toBeLessThanOrEqual(ISLAND_RADIUS + 1e-6);
+  it.each(scenes.map((s) => [s.id, s] as const))('keeps the %s stage within STAGE_RADIUS of its anchor', (_, scene) => {
+    expect(horizontalReach(stageFor(scene)())).toBeLessThanOrEqual(STAGE_RADIUS + 1e-4);
   });
 
   it.each(scenesWithArt)('merges the %s art into one mesh per material, so it costs one draw call each', (_, i) => {
-    const parts = meshes(islandFor(scenes[i]!)());
+    const parts = meshes(stageFor(scenes[i]!)());
     expect(new Set(parts.map((m) => m.material)).size).toBe(parts.length);
   });
 
   it.each(scenesWithArt)('keeps the travel paths into and out of %s clear of its art', (_, i) => {
     const layout = layoutScenes(scenes);
     const anchor = layout.anchors[i]!;
-    const island = islandFor(scenes[i]!)();
-    island.position.set(anchor.x, anchor.y, anchor.z);
+    const stage = stageFor(scenes[i]!)();
+    stage.position.set(anchor.x, anchor.y, anchor.z);
     // The path rises out of the rock below, so only parts above the walkable surface count.
-    const props = triangles(island).filter((t) => Math.max(t.a.y, t.b.y, t.c.y) > anchor.y + 0.01);
+    const props = triangles(stage).filter((t) => Math.max(t.a.y, t.b.y, t.c.y) > anchor.y + 0.01);
     const segments = [layout.segments[i - 1], layout.segments[i]].filter((s) => s !== undefined);
     for (const segment of segments) {
       for (let step = 1; step < 100; step++) {

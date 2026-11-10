@@ -11,12 +11,24 @@ const UP = new Vector3(0, 1, 0);
  * so a whole model costs one draw call for lit parts and one for glowing parts.
  */
 export class MergedModel {
-  private readonly lit: BufferGeometry[] = [];
-  private readonly glowing: BufferGeometry[] = [];
+  private lit: BufferGeometry[] = [];
+  private glowing: BufferGeometry[] = [];
+  private base = new Matrix4();
+
+  /** A view that adds into this same model with every part scaled about the origin. */
+  scaled(factor: number): MergedModel {
+    const view = new MergedModel();
+    view.lit = this.lit;
+    view.glowing = this.glowing;
+    view.base = this.base.clone().multiply(new Matrix4().makeScale(factor, factor, factor));
+    return view;
+  }
 
   add(paint: Paint, geometry: BufferGeometry, matrix: Matrix4): this {
     // The shader derives facet normals from screen-space derivatives, so only positions and colors are kept.
-    const part = (geometry.index ? geometry.toNonIndexed() : geometry.clone()).applyMatrix4(matrix);
+    const part = (geometry.index ? geometry.toNonIndexed() : geometry.clone()).applyMatrix4(
+      new Matrix4().multiplyMatrices(this.base, matrix),
+    );
     part.deleteAttribute('normal');
     part.deleteAttribute('uv');
     const { r, g, b } = new Color(paint.color);

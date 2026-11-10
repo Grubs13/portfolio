@@ -20,18 +20,18 @@ export interface WorldLayout {
   segments: Segment[];
 }
 
-/** Largest horizontal extent of any island from its anchor. */
-export const ISLAND_RADIUS = 3;
-export const MIN_SPACING = 2 * ISLAND_RADIUS + 2;
+/** Largest horizontal extent of any scene's ground from its anchor. It covers the screen at every framing. */
+export const STAGE_RADIUS = 40;
+export const MIN_SPACING = 2 * STAGE_RADIUS + 8;
 
 // Horizontal axes chosen for an isometric camera looking from (+x, +y, +z):
 // LATERAL runs left to right on screen and RECEDE runs away from the viewer.
 const LATERAL = { x: Math.SQRT1_2, z: -Math.SQRT1_2 };
 const RECEDE = { x: -Math.SQRT1_2, z: -Math.SQRT1_2 };
-const SWING = 5;
-const RISE = 4;
-const DEPTH = 6;
-const ARC = 6;
+const SWING = 38;
+const RISE = 10;
+const DEPTH = 50;
+const ARC = 40;
 
 /**
  * Places scenes on an ascending zig-zag: alternating left and right while

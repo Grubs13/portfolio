@@ -1,25 +1,32 @@
 import { BoxGeometry, CylinderGeometry, Matrix4, type Object3D } from 'three';
-import { ISLAND_RADIUS } from '../layout';
+import { STAGE_RADIUS } from '../layout';
 import type { MergedModel } from './merged';
-import { palette } from './palette';
+import { palette, type Paint } from './palette';
 
 export type Vec = readonly [number, number, number];
-/** Builds one island, centered on its scene anchor with the walkable surface at y = 0. */
-export type IslandBuilder = () => Object3D;
+/** Builds one scene's stage, centered on its anchor with the ground at y = 0 where the character stands. */
+export type StageBuilder = () => Object3D;
 
 export const box = new BoxGeometry(1, 1, 1);
 
 /**
- * A floating rock with a grass cap whose top face sits at `top`: a wide crust
- * over a crooked spike, so the underside reads as a hanging crag.
+ * World x and z for a point `right` units to the right of the character on
+ * screen and `back` units up-screen across the ground. The camera looks from
+ * +x +z, so laying a scene out in these terms keeps it composed for the eye.
  */
-export function floatingRock(model: MergedModel, top: number, radius = ISLAND_RADIUS): MergedModel {
-  const cap = 0.14;
-  const crust = 0.8 * (radius / ISLAND_RADIUS);
-  const spike = 1.7 * (radius / ISLAND_RADIUS);
+export function onScreen(right: number, back: number): { x: number; z: number } {
+  return { x: (right - back) * Math.SQRT1_2, z: (-right - back) * Math.SQRT1_2 };
+}
+
+/**
+ * The ground every scene stands on: a slab of rock whose top fills the screen
+ * at any framing, with a crooked crag below that shows while flying between scenes.
+ */
+export function stageGround(model: MergedModel, surface: Paint = palette.grass): MergedModel {
+  const r = STAGE_RADIUS;
   const at = (y: number, yaw = 0) => new Matrix4().makeRotationY(yaw).setPosition(0, y, 0);
   return model
-    .add(palette.grass, new CylinderGeometry(radius, radius, cap, 7), at(top - cap / 2))
-    .add(palette.rock, new CylinderGeometry(radius, radius * 0.7, crust, 7), at(top - cap - crust / 2))
-    .add(palette.rock, new CylinderGeometry(radius * 0.7, radius * 0.15, spike, 7), at(top - cap - crust - spike / 2, Math.PI / 7));
+    .add(surface, new CylinderGeometry(r, r, 0.3, 9), at(-0.15))
+    .add(palette.rock, new CylinderGeometry(r, r * 0.75, 4, 9), at(-2.3))
+    .add(palette.rock, new CylinderGeometry(r * 0.75, r * 0.1, 18, 9), at(-13.3, Math.PI / 9));
 }

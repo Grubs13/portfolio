@@ -1,5 +1,5 @@
 import { CylinderGeometry, Matrix4, Vector3 } from 'three';
-import { floatingRock, type IslandBuilder, type Vec } from './kit';
+import { type StageBuilder, stageGround, type Vec } from './kit';
 import { MergedModel } from './merged';
 import { palette } from './palette';
 
@@ -23,8 +23,7 @@ const BOOM_TIP: Vec = [ROW_MID_X, 4.05, ROW_Z[LIFTED_ROW]!];
 const CRANE: Vec = [-0.6, 0, -2.15];
 
 function pad(model: MergedModel) {
-  floatingRock(model, -PAD);
-  model.add(palette.concrete, new CylinderGeometry(2.6, 2.6, PAD, 7), new Matrix4().makeTranslation(0, -PAD / 2, 0));
+  model.add(palette.concrete, new CylinderGeometry(2.6, 2.6, PAD, 7), new Matrix4().makeTranslation(0, -PAD / 2 + 0.02, 0));
 }
 
 /** One row of catalyst tubes joined by a header across their tops. */
@@ -134,13 +133,17 @@ function crawlerCrane(model: MergedModel) {
   model.box(palette.safetyYellow, [tip.x, tip.y, tip.z], [0.16, 0.16, 0.12], yaw);
 }
 
-export const reformerReharp: IslandBuilder = () => {
-  const model = new MergedModel();
+/** The diorama is laid out at character scale and enlarged to plant scale on its stage. */
+const PLANT_SCALE = 2.5;
+
+export const reformerReharp: StageBuilder = () => {
+  const ground = stageGround(new MergedModel());
+  const model = ground.scaled(PLANT_SCALE);
   pad(model);
   radiantBox(model);
   liftedHarp(model);
   convectionAndStack(model);
   oldCoil(model);
   crawlerCrane(model);
-  return model.build();
+  return ground.build();
 };
