@@ -27,7 +27,8 @@ const RADIANT = { u0: -12, u1: -1 };
 const OPENING = { u0: -7.4, u1: -4.4 };
 /** Set back from the front wall, which leaves the outgoing flight path a clear gap before the stack. */
 const CONVECTION = { u0: 0.4, u1: 5, front: FACE - 1.5 };
-const STACK: Vec = [8.5, 0, -10];
+/** In the plant's own frame, which turns half round, so this lands behind the convection section. */
+const STACK: Vec = [8.5, 0, -4];
 
 /** A box from corner to corner, which reads more naturally for buildings than centre and size. */
 function slab(model: MergedModel, paint: Paint, [x0, y0, z0]: Vec, [x1, y1, z1]: Vec) {
@@ -40,26 +41,44 @@ function ground(model: MergedModel) {
   model.box(palette.roadEdge, [0, 0.05, 1.9], [56, 0.01, 0.25]);
 }
 
+/**
+ * One long wall of the radiant box: stiffener grid with weathered panels, inspection doors,
+ * two walkways with handrails, and the inlet header with a pigtail to every tube row.
+ * `wall` is the wall's v and `out` the side it faces, so both long walls share the detail.
+ */
+function longWall(model: MergedModel, wall: number, out: 1 | -1) {
+  const { u0, u1 } = RADIANT;
+  const at = (d: number) => wall + out * d;
+  for (let u = u0; u <= u1 + 0.01; u += 1.6) slab(model, palette.rustDark, [u - 0.07, BOX_BOTTOM, wall], [u + 0.07, BOX_TOP, at(0.1)]);
+  for (const y of [3.4, 5.2]) slab(model, palette.rustDark, [u0, y - 0.07, wall], [u1, y + 0.07, at(0.1)]);
+  for (let u = u0 + 0.8, i = 0; u < u1; u += 1.6, i++) {
+    if (i % 3 === (out === 1 ? 1 : 2)) slab(model, palette.rustLight, [u - 0.65, 3.55, wall], [u + 0.65, 5.05, at(0.04)]);
+    slab(model, palette.rustDark, [u - 0.22, BOX_BOTTOM + 0.6, wall], [u + 0.22, BOX_BOTTOM + 1.1, at(0.06)]);
+  }
+  for (const y of [3.4, BOX_TOP]) {
+    slab(model, palette.galvanized, [u0, y - 0.08, wall], [u1 + 1.2, y, at(0.9)]);
+    slab(model, palette.galvanized, [u0, y + 0.85, at(0.85)], [u1 + 1.2, y + 0.92, at(0.9)]);
+    for (let u = u0; u <= u1 + 1.2; u += 1.2) slab(model, palette.galvanized, [u - 0.03, y, at(0.85)], [u + 0.03, y + 0.9, at(0.9)]);
+  }
+  pipe(model, palette.stainless, [(u0 + u1) / 2, BOX_TOP + 0.35, at(-0.3)], 0.2, u1 - u0, true, 8);
+  for (let u = u0 + 0.4; u < u1; u += 0.7) slab(model, palette.stainless, [u - 0.04, BOX_TOP + 0.05, at(-0.5)], [u + 0.04, BOX_TOP + 0.35, at(-0.42)]);
+}
+
 function radiantSection(model: MergedModel) {
   const { u0, u1 } = RADIANT;
   for (let u = u0 + 0.6; u < u1; u += 2.5) {
     for (const v of [FACE - 0.6, BACK + 0.6]) slab(model, palette.concrete, [u - 0.35, 0, v - 0.35], [u + 0.35, BOX_BOTTOM, v + 0.35]);
   }
   slab(model, palette.radiantRust, [u0, BOX_BOTTOM, BACK], [u1, BOX_TOP, FACE]);
+  longWall(model, FACE, 1);
+  longWall(model, BACK, -1);
 
-  // Stiffener grid on the front wall and both end walls, with weathered panels between.
-  for (let u = u0; u <= u1 + 0.01; u += 1.6) slab(model, palette.rustDark, [u - 0.07, BOX_BOTTOM, FACE], [u + 0.07, BOX_TOP, FACE + 0.1]);
-  for (const y of [3.4, 5.2]) slab(model, palette.rustDark, [u0, y - 0.07, FACE], [u1, y + 0.07, FACE + 0.1]);
-  for (let u = u0 + 0.8, i = 0; u < u1; u += 1.6, i++) {
-    if (i % 3 === 1) slab(model, palette.rustLight, [u - 0.65, 3.55, FACE], [u + 0.65, 5.05, FACE + 0.04]);
-  }
+  // Stiffeners on both end walls.
   for (let v = BACK; v <= FACE + 0.01; v += 1.5) {
     slab(model, palette.rustDark, [u1, BOX_BOTTOM, v - 0.07], [u1 + 0.1, BOX_TOP, v + 0.07]);
     slab(model, palette.rustDark, [u0 - 0.1, BOX_BOTTOM, v - 0.07], [u0, BOX_TOP, v + 0.07]);
   }
   for (const y of [3.4, 5.2]) slab(model, palette.rustDark, [u0 - 0.1, y - 0.07, BACK], [u0, y + 0.07, FACE]);
-  // Inspection doors along the foot of the front wall.
-  for (let u = u0 + 0.8; u < u1; u += 1.6) slab(model, palette.rustDark, [u - 0.22, BOX_BOTTOM + 0.6, FACE], [u + 0.22, BOX_BOTTOM + 1.1, FACE + 0.06]);
 
   // Tunnel burners: a row of boxes along the foot of the end wall, each with its fuel line off a common header.
   for (let v = BACK + 0.75; v < FACE - 0.3; v += 0.9) {
@@ -69,23 +88,11 @@ function radiantSection(model: MergedModel) {
   }
   pipe(model, palette.stainless, [u0 - 0.35, BOX_BOTTOM + 2.05, (FACE + BACK) / 2], 0.09, DEPTH, false, 6);
 
-  // Two walkways along the face with handrails.
-  for (const y of [3.4, BOX_TOP]) {
-    slab(model, palette.galvanized, [u0, y - 0.08, FACE], [u1 + 1.2, y, FACE + 0.9]);
-    slab(model, palette.galvanized, [u0, y + 0.85, FACE + 0.85], [u1 + 1.2, y + 0.92, FACE + 0.9]);
-    for (let u = u0; u <= u1 + 1.2; u += 1.2) slab(model, palette.galvanized, [u - 0.03, y, FACE + 0.85], [u + 0.03, y + 0.9, FACE + 0.9]);
-  }
-  // Stairs zig-zagging up the end wall.
+  // Stairs zig-zagging up the other end wall.
   for (const [y0, y1, v0, v1] of [[0, 3.4, FACE - 0.2, BACK + 1.2], [3.4, BOX_TOP, BACK + 1.2, FACE - 0.2]] as const) {
     model.beam(palette.galvanized, [u1 + 0.75, y0, v0], [u1 + 0.75, y1, v1], 0.7);
   }
   slab(model, palette.galvanized, [u1 + 0.3, 3.32, BACK + 0.4], [u1 + 1.2, 3.4, FACE]);
-
-  // The inlet header under the penthouse, with a pigtail down to every tube row.
-  pipe(model, palette.stainless, [(u0 + u1) / 2, BOX_TOP + 0.35, FACE - 0.3], 0.2, u1 - u0, true, 8);
-  for (let u = u0 + 0.4; u < u1; u += 0.7) {
-    slab(model, palette.stainless, [u - 0.04, BOX_TOP + 0.05, FACE - 0.5], [u + 0.04, BOX_TOP + 0.35, FACE - 0.42]);
-  }
 }
 
 /** The corrugated penthouse over the harps, with roof panels off above the harp being changed. */
@@ -262,26 +269,43 @@ function laydown(model: MergedModel) {
   vehicle(model, [-17.5, 0, 0.4], palette.tube, true);
 }
 
+/** The middle of the row's footprint, which the plant turns about to show its far side. */
+const ROW_CENTER = new Vector3(-1, 0, (FACE + BACK) / 2);
+/** Turns the plant half a turn about its middle, so the camera sees the far wall and the stair end. */
+const FAR_SIDE = new Matrix4()
+  .makeTranslation(ROW_CENTER.x, 0, ROW_CENTER.z)
+  .multiply(new Matrix4().makeRotationY(Math.PI))
+  .multiply(new Matrix4().makeTranslation(-ROW_CENTER.x, 0, -ROW_CENTER.z));
+
+const turned = ([u, y, v]: Vec): Vec => {
+  const p = new Vector3(u, y, v).applyMatrix4(FAR_SIDE);
+  return [p.x, p.y, p.z];
+};
+
 export const reformerReharp: StageBuilder = () => {
   const stage = stageGround(new MergedModel());
   const row = stage.within(new Matrix4().makeRotationY(ROW_YAW));
+  const plant = row.within(FAR_SIDE);
+  // The road, laydown and cranes stay on the camera's side; only the plant itself turns.
   ground(row);
-  radiantSection(row);
-  penthouse(row);
+  laydown(row);
+  radiantSection(plant);
+  penthouse(plant);
   const harpHook: Vec = [(OPENING.u0 + OPENING.u1) / 2, 17.5, (FACE + BACK) / 2];
-  liftedHarp(row, harpHook);
-  // Set behind the box so its boom reaches across the frame, the harp hangs clear and the burners stay in view.
-  crawlerCrane(row, [-18, 0, BACK - 5], [harpHook[0], harpHook[1] + 3, harpHook[2]], harpHook[1]);
-  convectionSection(row);
-  // The new module hangs above its empty slot at the top of the right-hand column.
+  liftedHarp(plant, harpHook);
+  convectionSection(plant);
+  // The new module hangs above its empty slot at the top of its column.
   const [mu, mv, mBottom] = [CONVECTION.u1 - MODULE[0] / 2 - 0.1, (CONVECTION.front + BACK) / 2, 11];
   const moduleHook: Vec = [mu, mBottom + MODULE[1] + 1.6, mv];
-  convectionModule(row, [mu, mBottom, mv], MODULE);
-  for (const s of [-1, 1]) row.beam(palette.black, [mu, mBottom + MODULE[1], mv + s * 1.8], moduleHook, 0.05);
-  crawlerCrane(row, [7, 0, BACK - 7], [moduleHook[0], moduleHook[1] + 5, moduleHook[2]], moduleHook[1]);
-  stack(row);
-  laydown(row);
-  // Aim between the character and the cranes, so the burner face, both lifts and the stack share the frame.
+  convectionModule(plant, [mu, mBottom, mv], MODULE);
+  for (const s of [-1, 1]) plant.beam(palette.black, [mu, mBottom + MODULE[1], mv + s * 1.8], moduleHook, 0.05);
+  stack(plant);
+  // The cranes stand off the two ends of the plant, so their booms show side-on as they reach in.
+  const harpTip = turned([harpHook[0], harpHook[1] + 3, harpHook[2]]);
+  crawlerCrane(row, [harpTip[0] + 14, 0, harpTip[2] - 1], harpTip, harpHook[1]);
+  const moduleTip = turned([moduleHook[0], moduleHook[1] + 5, moduleHook[2]]);
+  crawlerCrane(row, [moduleTip[0] - 13, 0, moduleTip[2] - 2], moduleTip, moduleHook[1]);
+  // Aim between the character and the cranes, so the plant, both lifts and the stack share the frame.
   const look = new Vector3(-2, 7, -6).applyAxisAngle(new Vector3(0, 1, 0), ROW_YAW);
   return { object: stage.build(), look: [look.x, look.y, look.z] };
 };
