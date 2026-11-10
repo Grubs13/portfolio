@@ -3,7 +3,8 @@ import { type StageBuilder, stageGround, type Vec } from './kit';
 import { MergedModel } from './merged';
 import { palette, type Paint } from './palette';
 import { building, deck, drum, exchangers, finFans, flare, handrail, pipeRack, quonset, shellBand, sleeperPipes, stack, structure, tank, vessel } from './plant';
-import { car, fence, field, gable, hayBale, lampPost, officeTrailer, pipe, place, powerPole, rng, seaCan, slough, steam, tree, vehicle, worker, type Rect, type XZ } from './props';
+import { baleStack, baler, combine, cultivator, grainCart, grainTruck, pivot, tractor } from './farm';
+import { car, fence, gable, hayBale, lampPost, officeTrailer, pipe, place, powerPole, rng, seaCan, slough, steam, tree, vehicle, worker, type Rect, type XZ } from './props';
 import { CAR_PITCH, hopperCar, locomotive, tankCar, track } from './rail';
 
 // Nutrien Carseland Nitrogen Operations, laid out after the satellite view and
@@ -32,42 +33,191 @@ const FENCE: readonly XZ[] = [
   [10.4, -28.4],
 ];
 
-function countryside(model: MergedModel) {
-  field(model, [-52, -46, -10, -32.5], palette.canola, palette.canolaDeep);
-  field(model, [-36, -58, -10, -48], palette.fieldGreen, palette.fieldDark, false);
-  field(model, [-8, -60, 26, -32.5], palette.fieldGreen);
-  field(model, [31, -46, 50, -20], palette.canola, palette.canolaDeep, false);
-  field(model, [42, -17, 64, 12], palette.fieldGreen, palette.fieldDark);
-  field(model, [31, -17, 40, -3], palette.stubble2, palette.stubbleDark, false);
-  field(model, [31, 17, 52, 46], palette.canola, palette.canolaDeep);
-  field(model, [-5, 39, 27, 62], palette.fieldGreen);
-  field(model, [-52, 13, -20, 44], palette.stubble2, palette.stubbleDark);
-  field(model, [-36, 46, -7, 58], palette.canola, palette.canolaDeep, false);
-  field(model, [-64, -24, -45, 10], palette.canola, palette.canolaDeep, false);
+/** Just inside the rim of the stage's nine-sided slab, where the fields run out. */
+const RIM = 69;
 
-  const random = rng(5);
-  for (const [x0, z0, x1, z1] of [[-8, -60, 26, -32.5], [-5, 39, 27, 62]] as const) {
-    // Swathes left by the mower curve round the sloughs, so the bales sit in loose rows.
-    for (let i = 0; i < 26; i++) hayBale(model, [x0 + 1 + random() * (x1 - x0 - 2), z0 + 1 + random() * (z1 - z0 - 2)], random() > 0.5);
+/** `rect` cut into strips across its long side, each trimmed to the rim, so square fields meet the round edge in steps. */
+function inside([x0, z0, x1, z1]: Rect, step = 2): Rect[] {
+  const chord = (a: number, b: number) => Math.sqrt(Math.max(0, RIM ** 2 - Math.max(a * a, b * b)));
+  const alongX = x1 - x0 >= z1 - z0;
+  const [lo, hi] = alongX ? [z0, z1] : [x0, x1];
+  const strips: Rect[] = [];
+  for (let a = lo; a < hi - 1e-6; a += step) {
+    const b = Math.min(a + step, hi);
+    const h = chord(a, b);
+    const [c0, c1] = alongX ? [Math.max(x0, -h), Math.min(x1, h)] : [Math.max(z0, -h), Math.min(z1, h)];
+    if (c1 - c0 > 0.3) strips.push(alongX ? [c0, a, c1, b] : [a, c0, b, c1]);
   }
-  for (const [x, z, r] of [[4, -44, 1.8], [18, -52, 1.3], [-2, -54, 1.1], [10, 50, 1.7], [20, 44, 1.2], [52, -4, 1.6], [-30, 28, 1.4]] as const) {
-    slough(model, [x, z], r);
+  return strips;
+}
+
+/** Ground cover over `rect` up to `top`, trimmed to the rim. A standing crop is a raised patch. */
+function patch(model: MergedModel, paint: Paint, rect: Rect, top = 0.02) {
+  for (const [x0, z0, x1, z1] of inside(rect)) model.slab(paint, [x0, 0, z0], [x1, top, z1]);
+}
+
+/** Rows of `paint` across `rect` every `pitch`, running along x or z: drill rows, swaths or windrows. */
+function rows(model: MergedModel, [x0, z0, x1, z1]: Rect, paint: Paint, alongX: boolean, pitch = 1.7, width = 0.45, top = 0.03) {
+  if (alongX) for (let z = z0 + 0.8; z + width < z1; z += pitch) patch(model, paint, [x0, z, x1, z + width], top);
+  else for (let x = x0 + 0.8; x + width < x1; x += pitch) patch(model, paint, [x, z0, x + width, z1], top);
+}
+
+/** Round bales every `spacing` along a line, a little off it as the baler wanders, skipping any near the rim. */
+function baleRow(model: MergedModel, [ax, az]: XZ, [bx, bz]: XZ, spacing: number, random: () => number) {
+  const count = Math.floor(Math.hypot(bx - ax, bz - az) / spacing);
+  for (let i = 0; i <= count; i++) {
+    const t = (i + random() * 0.4) / Math.max(count, 1);
+    const [x, z] = [ax + (bx - ax) * t + (random() - 0.5) * 0.5, az + (bz - az) * t + (random() - 0.5) * 0.5];
+    if (Math.hypot(x, z) < RIM - 1.5) hayBale(model, [x, z], Math.abs(bx - ax) < Math.abs(bz - az));
   }
+}
 
-  // The township road along the north fence and the range road to the east, with a power line.
-  model.slab(palette.road, [-62, 0, -31.3], [62, 0.035, -29.7]);
-  model.slab(palette.road, [28, 0, -62], [29.6, 0.035, 62]);
-  model.slab(palette.road, [10.7, 0, -29.7], [12.3, 0.035, -28.4]);
-  for (let x = -56; x <= 56; x += 8) powerPole(model, [x, -32], false);
-  for (let z = -58; z <= 62; z += 8) powerPole(model, [30.4, z], true);
-  for (let x = -50; x < -12; x += 2.3) tree(model, [x, -33.2], 1.1 + (x % 3) * 0.1);
-  for (let z = -44; z < -22; z += 2.4) tree(model, [50.8, z], 1.2, true);
+// Section roads on the mile grid round the plant: the township roads north and south and the range roads east and west.
+const ROADS: readonly Rect[] = [
+  [-75, -31.3, 75, -29.7],
+  [-75, 38.2, 75, 39.8],
+  [28, -75, 29.6, 75],
+  [-46.6, -75, -45, 75],
+];
 
-  // A farmyard off to the north-east: house, red barn, grain bins and a windbreak.
+/** North of the plant: wheat half combined, the cart running alongside and a truck waiting on the headland. */
+function harvest(model: MergedModel) {
+  const [x0, z0, x1, z1] = [-45, -70, -10, -31.3];
+  // The combine works west along the cut edge, its header spanning z -47 to -43.
+  const [cx, cz] = [-24, -45];
+  patch(model, palette.stubble2, [x0, z0, x1, z1]);
+  rows(model, [x0, -43, x1, z1], palette.stubbleDark, true, 4, 0.5);
+  rows(model, [cx - 2.4, -47, x1, -43], palette.stubbleDark, true, 4, 0.5);
+  for (const rect of [[x0, z0, x1, -47], [x0, -47, cx - 2.4, -43]] as const) {
+    patch(model, palette.wheat, rect, 0.32);
+    rows(model, rect, palette.wheatDark, true, 1.2, 0.3, 0.33);
+  }
+  combine(model.within(place(cx, cz, Math.PI)), palette.deereGreen, true);
+  grainCart(model.within(place(cx - 2.4, cz + 3.2, Math.PI)), palette.deereGreen);
+  grainTruck(model.within(place(-14, -33.2, Math.PI)), palette.tube);
+  vehicle(model, [-18.5, 0, -33.4], palette.carRed, true);
+}
+
+/** North-east of the plant: an irrigated circle of green under its pivot, the dry corners left to stubble. */
+function pivotField(model: MergedModel) {
+  const [cx, cz, radius, towers] = [9, -50, 17, 4];
+  patch(model, palette.barley, [-10, -70, 28, -31.3]);
+  rows(model, [-10, -70, 28, -31.3], palette.stubble2, false, 1.7);
+  model.cylinder(palette.fieldGreen, [cx, 0.02, cz], radius, 0.04, 32);
+  // Ruts worn by the tower wheels, outermost first so each ring lies a hair above the last.
+  let top = 0.04;
+  for (let k = towers; k >= 1; k--) {
+    const r = (radius * k) / (towers + 0.3);
+    for (const [paint, ring] of [[palette.fieldDark, r + 0.25], [palette.fieldGreen, r - 0.25]] as const) {
+      top += 0.004;
+      model.cylinder(paint, [cx, top / 2, cz], ring, top, 32);
+    }
+  }
+  pivot(model.within(place(cx, cz, 0.9)), radius, towers);
+}
+
+/** The farmyard across the range road: house, barn, bins, a stack of square bales and a shelterbelt, in a canola field. */
+function farmyard(model: MergedModel) {
+  patch(model, palette.canola, [29.6, -70, 70, -31.3]);
+  rows(model, [29.6, -70, 70, -31.3], palette.canolaDeep, false);
+  model.slab(palette.grass, [30.4, 0, -57], [47, 0.04, -46.4]);
+  model.slab(palette.gravel, [30.4, 0, -50.2], [36, 0.05, -47]);
   building(model, [36, -52], [39, -50], 1.3, { roof: 'gableX', roofPaint: palette.stoneDark, windows: [0.8] });
   building(model, [41, -53], [44, -49], 1.8, { wall: palette.canRed, roof: 'gableZ', roofPaint: palette.galvanized, door: false });
-  for (const x of [34, 32.4]) tank(model, [x, -48.6], 0.7, 1.5, { paint: palette.galvanized, stair: false, segments: 10 });
-  for (let x = 31; x <= 43; x += 1.8) tree(model, [x, -54.5], 1.3, true);
+  quonset(model, [44.8, -47.8], 0.9, 3.4, true);
+  for (const x of [32, 33.5, 35]) tank(model, [x, -51.6], 0.7, 1.5, { paint: palette.galvanized, stair: false, segments: 10 });
+  baleStack(model.within(place(38.6, -47.6)), 6);
+  tractor(model.within(place(33.6, -48.6, 0.3)), palette.deereGreen);
+  for (let x = 31; x <= 46; x += 1.8) tree(model, [x, -56.2], 1.3, true);
+  for (let z = -54.4; z <= -50; z += 1.8) tree(model, [46.2, z], 1.2, true);
+}
+
+/** East of the plant: a hay field raked into windrows, being baled one row at a time. */
+function hayField(model: MergedModel) {
+  const [x0, z0, x1, z1] = [29.6, -29.7, 70, -1.5];
+  patch(model, palette.fieldGreen, [x0, z0, x1, z1]);
+  const random = rng(17);
+  const balerZ = -14;
+  for (let k = 0, x = 31.8; x < x1; k++, x += 3.4) {
+    if (k < 4) baleRow(model, [x + 0.3, z0 + 1.5], [x + 0.3, z1 - 1], 3.6, random);
+    else if (k === 4) {
+      patch(model, palette.hay, [x, z0, x + 0.6, balerZ], 0.06);
+      baleRow(model, [x + 0.3, balerZ + 4], [x + 0.3, z1 - 1], 3.6, random);
+      baler(model.within(place(x + 0.3, balerZ, Math.PI / 2)), palette.deereGreen);
+    } else patch(model, palette.hay, [x, z0, x + 0.6, z1], 0.06);
+  }
+}
+
+/** South-east: stubble being worked black behind a four-wheel-drive and its cultivator. */
+function tillage(model: MergedModel) {
+  const [x0, z0, x1, z1] = [41, -1.5, 70, 38.2];
+  const [tx, tz, width] = [50, 12, 6];
+  patch(model, palette.stubble2, [x0, z0, x1, z1]);
+  rows(model, [x0, z0, x1, z1], palette.stubbleDark, false);
+  for (const rect of [[x0, z0, tx, z1], [tx, tz + 3, tx + width, z1]] as const) {
+    patch(model, palette.soil, rect, 0.025);
+    rows(model, rect, palette.soilDark, false, 1.2, 0.4, 0.035);
+  }
+  cultivator(model.within(place(tx + width / 2, tz, Math.PI / 2)), palette.caseRed, width);
+
+  // Barley stubble by the neighbour's ponds, its straw already baled.
+  patch(model, palette.stubble2, [29.6, 15, 41, 38.2]);
+  rows(model, [29.6, 15, 41, 38.2], palette.stubbleDark, true, 3.4, 0.5);
+  const random = rng(23);
+  for (let z = 17; z < 37; z += 3.4) baleRow(model, [31, z + 0.25], [40, z + 0.25], 3.2, random);
+}
+
+/** South and west of the plant: canola, wheat, stubble with bales hauled off on a wagon, worked land and a slough or two. */
+function outerFields(model: MergedModel) {
+  for (const [rect, base, stripe, alongX, top] of [
+    [[-45, 39.8, -8, 70], palette.canola, palette.canolaDeep, true, 0.02],
+    [[29.6, 39.8, 70, 70], palette.wheat, palette.wheatDark, false, 0.32],
+    [[-70, -70, -46.6, -31.3], palette.canola, palette.canolaDeep, false, 0.02],
+    [[-70, -29.7, -46.6, 4], palette.barley, palette.stubble2, true, 0.28],
+    [[-70, 4, -46.6, 38.2], palette.soil, palette.soilDark, false, 0.025],
+  ] as const) {
+    patch(model, base, rect, top);
+    rows(model, rect, stripe, alongX, 1.4, 0.35, top + 0.01);
+  }
+
+  const random = rng(5);
+  patch(model, palette.stubble2, [-8, 39.8, 28, 70]);
+  rows(model, [-8, 39.8, 28, 70], palette.stubbleDark, true, 4, 0.5);
+  for (let z = 42.6; z < 68; z += 4) baleRow(model, [-6, z + 0.25], [26, z + 0.25], 3.4, random);
+  const wagon = model.within(place(8, 48.4));
+  tractor(wagon, palette.caseRed, palette.black);
+  wagon.slab(palette.steelDark, [-1.4, 0.38, -0.06], [-0.9, 0.46, 0.06]);
+  wagon.slab(palette.plank, [-4.6, 0.4, -0.6], [-1.4, 0.55, 0.6]);
+  for (const x of [-4, -2]) for (const z of [-0.5, 0.5]) pipe(wagon, palette.black, [x, 0.25, z], 0.25, 0.14, false, 8);
+  for (let i = 0; i < 4; i++) for (const z of [-0.3, 0.3]) pipe(wagon, palette.hay, [-4.2 + i * 0.75, 0.91, z], 0.36, 0.55, false, 8);
+
+  // The stubble between the plant's west fence and the range road, kept clear round the flare.
+  for (const rect of [[-45, 10.8, -18.5, 38.2], [-18.5, 24.5, -7, 38.2]] as const) {
+    patch(model, palette.stubble2, rect);
+    rows(model, rect, palette.stubbleDark, true, 3.4, 0.5);
+  }
+  for (let z = 13.6; z < 37; z += 3.4) {
+    for (let x = -43 + random() * 3; x < (z > 24.5 ? -8 : -19.5); x += 3.4 + random()) {
+      if (Math.hypot(x + 27, z - 20) > 5) hayBale(model, [x, z + 0.25], true);
+    }
+  }
+
+  for (const [x, z, r] of [[-58, -12, 1.6], [-30, 54, 1.5], [-55, -45, 1.2], [62, 6, 1.2]] as const) slough(model, [x, z], r);
+}
+
+function countryside(model: MergedModel) {
+  for (const road of ROADS) patch(model, palette.road, road, 0.035);
+  model.slab(palette.road, [10.7, 0, -29.7], [12.3, 0.035, -28.4]);
+  harvest(model);
+  pivotField(model);
+  farmyard(model);
+  hayField(model);
+  tillage(model);
+  outerFields(model);
+
+  // A power line along the north township road and the east range road.
+  for (let x = -56; x <= 56; x += 8) powerPole(model, [x, -32], false);
+  for (let z = -58; z <= 62; z += 8) powerPole(model, [30.4, z], true);
 
   // Lined ponds of the neighbouring plant, across the range road.
   for (const [x0, z0, x1, z1] of [[31.5, 0, 40, 6.5], [31.5, 7.5, 40, 14]] as const) {

@@ -48,10 +48,10 @@ function ball(model: MergedModel, paint: Paint, [x, y, z]: Vec, [sx, sy, sz]: Ve
 }
 
 /** A rising plume of faceted puffs that grow and drift as they climb. */
-export function steam(model: MergedModel, [x, y, z]: Vec, puffs: number, size: number) {
+export function steam(model: MergedModel, [x, y, z]: Vec, puffs: number, size: number, paint: Paint = palette.steam) {
   for (let i = 0; i < puffs; i++) {
     const s = size * (1 + i * 0.15);
-    ball(model, palette.steam, [x - i * 0.4, y + i * size * 0.7, z - i * 0.25], [s, s * 0.85, s], puff);
+    ball(model, paint, [x - i * 0.4, y + i * size * 0.7, z - i * 0.25], [s, s * 0.85, s], puff);
   }
 }
 
