@@ -32,7 +32,8 @@ function triangles(object: Object3D): Triangle[] {
 }
 
 function horizontalReach(object: Object3D): number {
-  return Math.max(...triangles(object).flatMap((t) => [t.a, t.b, t.c].map((v) => Math.hypot(v.x, v.z))));
+  // A reduce, since a detailed stage has more vertices than a spread call can take as arguments.
+  return triangles(object).reduce((reach, t) => Math.max(reach, ...[t.a, t.b, t.c].map((v) => Math.hypot(v.x, v.z))), 0);
 }
 
 const scenesWithArt = scenes.flatMap((scene, i) => (SCENE_ART[scene.id] ? [[scene.id, i] as const] : []));
