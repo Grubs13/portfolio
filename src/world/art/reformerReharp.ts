@@ -6,26 +6,26 @@ import { gable, pipe, vehicle, worker } from './props';
 
 // The Kellogg reformer at Carseland mid-turnaround, after site photos. Left to
 // right along the row: the radiant section, a rust-panelled box on piers with
-// tunnel burners along its front and a corrugated penthouse over the harps;
+// tunnel burners across its left end wall and a corrugated penthouse over the harps;
 // the grey modules of the convection section; and the banded stack with the
 // F.D. fan house at its foot. One crane lifts a catalyst-tube harp out through
 // the opened penthouse roof while a second sets a new convection module.
 //
 // The row is laid out in its own frame (u along the row, v toward the viewer,
-// burner face at v = FACE) and turned so it runs across the screen with its
-// front face toward the camera. The character stands on the road in front of
-// the burners. Both flight paths leave toward screen-right, rising about one
-// unit per unit travelled, so nothing tall stands in front of the right half.
+// long front wall at v = FACE) and turned past 45 degrees so the camera sees
+// the front wall and the burner end wall at u0. The character stands on the
+// road in front of the row. Both flight paths leave toward screen-right,
+// rising about one unit per unit travelled, so nothing tall stands near them.
 
-const ROW_YAW = (2 * Math.PI) / 9;
+const ROW_YAW = (5 * Math.PI) / 12;
 const FACE = -4;
 const DEPTH = 6;
 const BACK = FACE - DEPTH;
 const BOX_BOTTOM = 1.2;
 const BOX_TOP = 7.2;
-const RADIANT = { u0: -15, u1: -1 };
-const OPENING = { u0: -8.2, u1: -5.2 };
-/** Set back from the burner face, which leaves the outgoing flight path a clear gap before the stack. */
+const RADIANT = { u0: -12, u1: -1 };
+const OPENING = { u0: -7.4, u1: -4.4 };
+/** Set back from the front wall, which leaves the outgoing flight path a clear gap before the stack. */
 const CONVECTION = { u0: 0.4, u1: 5, front: FACE - 1.5 };
 const STACK: Vec = [8.5, 0, -10];
 
@@ -47,21 +47,27 @@ function radiantSection(model: MergedModel) {
   }
   slab(model, palette.radiantRust, [u0, BOX_BOTTOM, BACK], [u1, BOX_TOP, FACE]);
 
-  // Stiffener grid on the burner face and the end wall, with weathered panels between.
+  // Stiffener grid on the front wall and both end walls, with weathered panels between.
   for (let u = u0; u <= u1 + 0.01; u += 1.6) slab(model, palette.rustDark, [u - 0.07, BOX_BOTTOM, FACE], [u + 0.07, BOX_TOP, FACE + 0.1]);
   for (const y of [3.4, 5.2]) slab(model, palette.rustDark, [u0, y - 0.07, FACE], [u1, y + 0.07, FACE + 0.1]);
   for (let u = u0 + 0.8, i = 0; u < u1; u += 1.6, i++) {
     if (i % 3 === 1) slab(model, palette.rustLight, [u - 0.65, 3.55, FACE], [u + 0.65, 5.05, FACE + 0.04]);
   }
-  for (let v = BACK; v <= FACE + 0.01; v += 1.5) slab(model, palette.rustDark, [u1, BOX_BOTTOM, v - 0.07], [u1 + 0.1, BOX_TOP, v + 0.07]);
-
-  // Tunnel burners: a row of boxes along the foot of the face, each with its fuel line.
-  for (let u = u0 + 0.9; u < u1 - 0.4; u += 1.3) {
-    slab(model, palette.rustLight, [u - 0.3, BOX_BOTTOM + 0.1, FACE], [u + 0.3, BOX_BOTTOM + 1.7, FACE + 0.45]);
-    slab(model, palette.rustDark, [u - 0.18, BOX_BOTTOM + 1.1, FACE + 0.45], [u + 0.18, BOX_BOTTOM + 1.4, FACE + 0.5]);
-    slab(model, palette.stainless, [u + 0.42, BOX_BOTTOM, FACE + 0.3], [u + 0.5, BOX_BOTTOM + 1.9, FACE + 0.38]);
+  for (let v = BACK; v <= FACE + 0.01; v += 1.5) {
+    slab(model, palette.rustDark, [u1, BOX_BOTTOM, v - 0.07], [u1 + 0.1, BOX_TOP, v + 0.07]);
+    slab(model, palette.rustDark, [u0 - 0.1, BOX_BOTTOM, v - 0.07], [u0, BOX_TOP, v + 0.07]);
   }
-  pipe(model, palette.stainless, [(u0 + u1) / 2, BOX_BOTTOM + 2.05, FACE + 0.35], 0.09, u1 - u0, true, 6);
+  for (const y of [3.4, 5.2]) slab(model, palette.rustDark, [u0 - 0.1, y - 0.07, BACK], [u0, y + 0.07, FACE]);
+  // Inspection doors along the foot of the front wall.
+  for (let u = u0 + 0.8; u < u1; u += 1.6) slab(model, palette.rustDark, [u - 0.22, BOX_BOTTOM + 0.6, FACE], [u + 0.22, BOX_BOTTOM + 1.1, FACE + 0.06]);
+
+  // Tunnel burners: a row of boxes along the foot of the end wall, each with its fuel line off a common header.
+  for (let v = BACK + 0.75; v < FACE - 0.3; v += 0.9) {
+    slab(model, palette.rustLight, [u0 - 0.45, BOX_BOTTOM + 0.1, v - 0.28], [u0, BOX_BOTTOM + 1.7, v + 0.28]);
+    slab(model, palette.rustDark, [u0 - 0.5, BOX_BOTTOM + 1.1, v - 0.16], [u0 - 0.45, BOX_BOTTOM + 1.4, v + 0.16]);
+    slab(model, palette.stainless, [u0 - 0.38, BOX_BOTTOM, v + 0.36], [u0 - 0.3, BOX_BOTTOM + 1.9, v + 0.44]);
+  }
+  pipe(model, palette.stainless, [u0 - 0.35, BOX_BOTTOM + 2.05, (FACE + BACK) / 2], 0.09, DEPTH, false, 6);
 
   // Two walkways along the face with handrails.
   for (const y of [3.4, BOX_TOP]) {
@@ -264,8 +270,8 @@ export const reformerReharp: StageBuilder = () => {
   penthouse(row);
   const harpHook: Vec = [(OPENING.u0 + OPENING.u1) / 2, 17.5, (FACE + BACK) / 2];
   liftedHarp(row, harpHook);
-  // Set off the end of the box so its boom reaches across the frame and the harp hangs clear of it.
-  crawlerCrane(row, [-21, 0, FACE + 1], [harpHook[0], harpHook[1] + 3, harpHook[2]], harpHook[1]);
+  // Set behind the box so its boom reaches across the frame, the harp hangs clear and the burners stay in view.
+  crawlerCrane(row, [-18, 0, BACK - 5], [harpHook[0], harpHook[1] + 3, harpHook[2]], harpHook[1]);
   convectionSection(row);
   // The new module hangs above its empty slot at the top of the right-hand column.
   const [mu, mv, mBottom] = [CONVECTION.u1 - MODULE[0] / 2 - 0.1, (CONVECTION.front + BACK) / 2, 11];
