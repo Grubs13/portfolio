@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { scenes, type Scene } from '../content/scenes';
-import { ISLAND_RADIUS, MIN_SPACING, layoutScenes, pointOnSegment, segmentTangent, type Vec3 } from './layout';
+import { STAGE_RADIUS, MIN_SPACING, layoutScenes, pointOnSegment, segmentTangent, type Vec3 } from './layout';
 
 const makeScenes = (n: number): Scene[] =>
   Array.from({ length: n }, (_, i) => ({ kind: 'intro', id: `s${i}`, name: '', tagline: '' }));
@@ -34,11 +34,11 @@ describe('layoutScenes', () => {
     }
   });
 
-  it('keeps every pair of islands from overlapping horizontally', () => {
+  it('keeps every pair of stages from overlapping horizontally', () => {
     const { anchors } = layoutScenes(makeScenes(12));
     for (let i = 0; i < anchors.length; i++) {
       for (let j = i + 1; j < anchors.length; j++) {
-        expect(horizontalDistance(anchors[i]!, anchors[j]!)).toBeGreaterThan(2 * ISLAND_RADIUS);
+        expect(horizontalDistance(anchors[i]!, anchors[j]!)).toBeGreaterThan(2 * STAGE_RADIUS);
       }
     }
   });

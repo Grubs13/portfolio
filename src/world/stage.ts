@@ -1,25 +1,26 @@
 import {
-  BoxGeometry,
   BufferGeometry,
-  CylinderGeometry,
-  DirectionalLight,
+  DepthTexture,
   Float32BufferAttribute,
-  Group,
-  HemisphereLight,
-  IcosahedronGeometry,
+  LinearSRGBColorSpace,
+  Matrix4,
+  MeshBasicMaterial,
   Mesh,
-  MeshLambertMaterial,
-  type Object3D,
+  NearestFilter,
   OrthographicCamera,
   Points,
   PointsMaterial,
   Scene as ThreeScene,
   Vector3,
   WebGLRenderer,
+  WebGLRenderTarget,
 } from 'three';
 import type { Scene } from '../content/scenes';
 import type { TimelineState } from '../lib/timeline';
-import { ISLAND_RADIUS, pointOnSegment, segmentTangent, type Vec3, type WorldLayout } from './layout';
+import { stageFor } from './art';
+import { buildCharacter, type Character } from './art/character';
+import { outlineMaterial, shadowUniforms, SUN } from './art/materials';
+import { pointOnSegment, segmentTangent, type Vec3, type WorldLayout } from './layout';
 
 /** Where on screen the subject is framed, as fractions of width and of height from the top. */
 export interface Focus {
@@ -34,99 +35,29 @@ export interface Stage {
   render(state: TimelineState): void;
 }
 
-interface Materials {
-  dark: MeshLambertMaterial;
-  mid: MeshLambertMaterial;
-  light: MeshLambertMaterial;
-}
-
 const ISO_DIRECTION = new Vector3(1, 1, 1).normalize();
 const CAMERA_DISTANCE = 100;
 /** World units that must fit across the free part of the screen. */
-const FRAME = 10;
-const LOOK_HEIGHT = 1;
+const FRAME = 26;
 const TRAVEL_ZOOM_OUT = 0.3;
-/** Faces the camera, which looks from +x +z. */
-const IDLE_YAW = Math.PI / 4;
+/** A three-quarter view: turned from the camera, which looks from +x +z, so one side shows. */
+const IDLE_YAW = Math.PI / 4 + 0.5;
 const LEAN = 0.45;
 const SWINGS_PER_TRAVEL = 3;
-
-const box = new BoxGeometry(1, 1, 1);
-const islandRock = new CylinderGeometry(ISLAND_RADIUS, 1.2, 2, 7);
-const platformRock = new CylinderGeometry(1.8, 1, 0.8, 6);
-const orb = new IcosahedronGeometry(1, 0);
-
-function mesh(
-  geometry: BufferGeometry,
-  material: MeshLambertMaterial,
-  [x, y, z]: [number, number, number],
-  [sx, sy, sz]: [number, number, number] = [1, 1, 1],
-): Mesh {
-  const m = new Mesh(geometry, material);
-  m.position.set(x, y, z);
-  m.scale.set(sx, sy, sz);
-  return m;
-}
-
-function group(...children: Object3D[]): Group {
-  const g = new Group();
-  g.add(...children);
-  return g;
-}
-
-const island = (m: Materials) => mesh(islandRock, m.dark, [0, -1, 0]);
-const platform = (m: Materials) => mesh(platformRock, m.dark, [0, -0.4, 0]);
-
-// Props sit toward -x, to the character's screen-left, so they never hide it or sit on its head.
-const ISLANDS: Record<Scene['kind'], (m: Materials) => Object3D> = {
-  intro: platform,
-  contact: platform,
-  role: (m) =>
-    group(
-      island(m),
-      mesh(box, m.mid, [-1.7, 0.6, 0.3], [1.2, 1.2, 1.2]),
-      mesh(box, m.light, [-1.2, 0.4, -1.1], [0.8, 0.8, 0.8]),
-      mesh(box, m.mid, [-1.8, 1.5, 0.1], [0.7, 0.6, 0.7]),
-    ),
-  project: (m) => group(island(m), mesh(box, m.mid, [-1.7, 2, 0.2], [1.2, 4, 1.2])),
-  interest: (m) => group(island(m), mesh(orb, m.light, [-1.7, 1.6, 0.4])),
-};
-
-interface Character {
-  root: Group;
-  body: Group;
-  arms: [Group, Group];
-  legs: [Group, Group];
-  flame: Mesh;
-}
-
-/** A limb hangs from a pivot at its top so rotating the pivot swings it. */
-function limb(material: MeshLambertMaterial, x: number, y: number, length: number, width: number): Group {
-  const pivot = group(mesh(box, material, [0, -length / 2, 0], [width, length, width]));
-  pivot.position.set(x, y, 0);
-  return pivot;
-}
-
-function buildCharacter(m: Materials): Character {
-  const arms: [Group, Group] = [limb(m.mid, -0.42, 0.95, 0.65, 0.2), limb(m.mid, 0.42, 0.95, 0.65, 0.2)];
-  const legs: [Group, Group] = [limb(m.mid, -0.16, 0.2, 0.75, 0.24), limb(m.mid, 0.16, 0.2, 0.75, 0.24)];
-  const flame = mesh(box, m.light, [0, -0.35, 0], [0.22, 0.7, 0.22]);
-  const nozzle = group(flame);
-  nozzle.position.set(0, 0.3, -0.42);
-  const body = group(
-    mesh(box, m.mid, [0, 0.6, 0], [0.6, 0.8, 0.4]),
-    mesh(box, m.light, [0, 1.3, 0], [0.5, 0.5, 0.5]),
-    mesh(box, m.dark, [0, 1.32, 0.24], [0.38, 0.18, 0.06]),
-    mesh(box, m.dark, [0, 0.65, -0.32], [0.5, 0.65, 0.25]),
-    nozzle,
-    ...arms,
-    ...legs,
-  );
-  // The body pivots at the hips so leaning tips the torso, not the feet.
-  body.position.y = 0.75;
-  const root = group(body);
-  return { root, body, arms, legs, flame };
-}
+/** CSS pixels per art pixel. Phones get finer pixels so the character keeps its detail. */
+const pixelSize = (width: number) => (width < 768 ? 2 : 3);
+const NEAR = 0.1;
+const FAR = CAMERA_DISTANCE * 5;
+/** Depth steps smaller than this many art pixels are surface slope, not a silhouette. */
+const OUTLINE_PIXELS = 3;
+/** Half the width of ground the shadow map covers around the character, and its resolution. */
+const SHADOW_REACH = 44;
+const SHADOW_SIZE = 1024;
+const SHADOW_DEPTH = 300;
+/** Stars sit on their own layer so they cast no shadows. */
+const SKY_LAYER = 1;
+/** Maps clip space to texture space, so the shader can look up the shadow map. */
+const TO_TEXTURE = new Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
 
 function buildStars(layout: WorldLayout, material: PointsMaterial): Points {
   const lo = new Vector3(Infinity, Infinity, Infinity);
@@ -135,13 +66,13 @@ function buildStars(layout: WorldLayout, material: PointsMaterial): Points {
     lo.min(new Vector3(a.x, a.y, a.z));
     hi.max(new Vector3(a.x, a.y, a.z));
   }
-  const margin = 45;
+  const margin = 120;
   // A fixed seed keeps the sky identical between visits and screenshots.
   let seed = 7;
   const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const behind = ISO_DIRECTION.clone().multiplyScalar(-90);
+  const behind = ISO_DIRECTION.clone().multiplyScalar(-150);
   const positions: number[] = [];
-  for (let i = 0; i < 900; i++) {
+  for (let i = 0; i < 2500; i++) {
     positions.push(
       lo.x - margin + random() * (hi.x - lo.x + 2 * margin) + behind.x,
       lo.y - margin + random() * (hi.y - lo.y + 2 * margin) + behind.y,
@@ -189,55 +120,94 @@ function poseCharacter(c: Character, layout: WorldLayout, state: TimelineState):
   return p;
 }
 
-export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[], layout: WorldLayout): Stage {
-  const renderer = new WebGLRenderer({
-    canvas,
-    alpha: true,
-    antialias: window.devicePixelRatio < 2,
-    powerPreference: 'low-power',
-  });
-  renderer.setClearColor(0x000000, 0);
+const right = new Vector3();
+const up = new Vector3();
 
-  const materials: Materials = {
-    dark: new MeshLambertMaterial({ color: 0x4a4e58, flatShading: true }),
-    mid: new MeshLambertMaterial({ color: 0x7a7f8a, flatShading: true }),
-    light: new MeshLambertMaterial({ color: 0xa9adb6, flatShading: true }),
-  };
+/** Points `camera` at `target` from `distance` along `direction`, shifted to the nearest multiple of `unit` across its view. */
+function aimSnapped(camera: OrthographicCamera, target: Vector3, direction: Vector3, distance: number, unit: number) {
+  camera.position.copy(target).addScaledVector(direction, distance);
+  camera.lookAt(target);
+  camera.updateMatrixWorld();
+  right.setFromMatrixColumn(camera.matrixWorld, 0);
+  up.setFromMatrixColumn(camera.matrixWorld, 1);
+  const r = camera.position.dot(right);
+  const u = camera.position.dot(up);
+  camera.position.addScaledVector(right, Math.round(r / unit) * unit - r).addScaledVector(up, Math.round(u / unit) * unit - u);
+  camera.updateMatrixWorld();
+}
+
+export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[], layout: WorldLayout): Stage {
+  // The world renders at art-pixel resolution into a target, the outline pass
+  // writes that same resolution to the canvas, and CSS scales the canvas up
+  // with hard pixel edges. Fewer pixels make it cheaper than a full-size render.
+  const renderer = new WebGLRenderer({ canvas, alpha: true, antialias: false, powerPreference: 'low-power' });
+  renderer.setClearColor(0x000000, 0);
+  renderer.outputColorSpace = LinearSRGBColorSpace;
+  const target = new WebGLRenderTarget(1, 1, {
+    minFilter: NearestFilter,
+    magFilter: NearestFilter,
+    depthTexture: new DepthTexture(1, 1),
+  });
 
   const world = new ThreeScene();
-  world.add(new HemisphereLight(0xdfe3ff, 0x1a1c2a, 1.6));
-  const sun = new DirectionalLight(0xffffff, 2.2);
-  sun.position.set(-4, 10, 6);
-  world.add(sun);
-
+  const looks: Vector3[] = [];
+  const lookBlend = new Vector3();
   scenes.forEach((scene, i) => {
     const anchor = layout.anchors[i]!;
-    const islandObject = ISLANDS[scene.kind](materials);
-    islandObject.position.set(anchor.x, anchor.y, anchor.z);
-    world.add(islandObject);
+    const { object: stageObject, look } = stageFor(scene)();
+    looks.push(new Vector3(...look));
+    stageObject.position.set(anchor.x, anchor.y, anchor.z);
+    world.add(stageObject);
   });
-  world.add(buildStars(layout, new PointsMaterial({ color: 0xc8ccd6, size: 1.6, sizeAttenuation: false })));
+  // Stars write no depth, so the outline pass treats them as sky.
+  const stars = buildStars(layout, new PointsMaterial({ color: 0xd9dcf2, size: 1, sizeAttenuation: false, depthWrite: false }));
+  stars.layers.set(SKY_LAYER);
+  world.add(stars);
 
-  const character = buildCharacter(materials);
+  const character = buildCharacter();
   world.add(character.root);
 
-  const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, CAMERA_DISTANCE * 5);
-  const target = new Vector3();
+  // Sunlight shadows come from a depth map rendered from the sun, centered on the character.
+  const sunCamera = new OrthographicCamera(-SHADOW_REACH, SHADOW_REACH, SHADOW_REACH, -SHADOW_REACH, 1, SHADOW_DEPTH);
+  const shadowTarget = new WebGLRenderTarget(SHADOW_SIZE, SHADOW_SIZE, { depthTexture: new DepthTexture(SHADOW_SIZE, SHADOW_SIZE) });
+  const depthOnly = new MeshBasicMaterial({ colorWrite: false });
+  shadowUniforms.tShadow.value = shadowTarget.depthTexture;
+  shadowUniforms.shadowBias.value = (2.5 * (2 * SHADOW_REACH)) / SHADOW_SIZE / (SHADOW_DEPTH - 1);
+
+  const post = new ThreeScene();
+  const triangle = new BufferGeometry();
+  triangle.setAttribute('position', new Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+  const outline = new Mesh(triangle, outlineMaterial);
+  outline.frustumCulled = false;
+  post.add(outline);
+  outlineMaterial.uniforms.tColor!.value = target.texture;
+  outlineMaterial.uniforms.tDepth!.value = target.depthTexture;
+
+  const camera = new OrthographicCamera(-1, 1, 1, -1, NEAR, FAR);
+  camera.layers.enable(SKY_LAYER);
+  const look = new Vector3();
   let aspect = 1;
+  let rows = 1;
   let focus: Focus = { x: 0.5, y: 0.5 };
 
   return {
-    ready: renderer.compileAsync(world, camera),
+    ready: Promise.all([renderer.compileAsync(world, camera), renderer.compileAsync(post, camera)]),
 
     resize(width, height, nextFocus) {
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, width < 768 ? 1.5 : 2));
-      renderer.setSize(width, height, false);
+      const px = pixelSize(width);
+      const columns = Math.max(1, Math.round(width / px));
+      rows = Math.max(1, Math.round(height / px));
+      renderer.setPixelRatio(1);
+      renderer.setSize(columns, rows, false);
+      target.setSize(columns, rows);
+      outlineMaterial.uniforms.texel!.value.set(1 / columns, 1 / rows);
       aspect = width / height;
       focus = nextFocus;
     },
 
     render(state) {
       const subject = poseCharacter(character, layout, state);
+
       const zoom = state.phase === 'travel' ? 1 + TRAVEL_ZOOM_OUT * Math.sin(Math.PI * state.t) : 1;
       // The free part of the screen is the largest band centered on `focus` along each axis.
       const freeX = Math.max(0.2, 2 * Math.min(focus.x, 1 - focus.x));
@@ -250,11 +220,29 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
       camera.bottom = -(1 - focus.y) * viewHeight;
       camera.updateProjectionMatrix();
 
-      target.set(subject.x, subject.y + LOOK_HEIGHT, subject.z);
-      camera.position.copy(target).addScaledVector(ISO_DIRECTION, CAMERA_DISTANCE);
-      camera.lookAt(target);
+      const offset =
+        state.phase === 'dwell' ? looks[state.scene]! : lookBlend.lerpVectors(looks[state.from]!, looks[state.to]!, state.t);
+      look.set(subject.x, subject.y, subject.z).add(offset);
+      const unit = viewHeight / rows;
+      // Snapped to whole art pixels, so still geometry does not shimmer as the camera pans.
+      aimSnapped(camera, look, ISO_DIRECTION, CAMERA_DISTANCE, unit);
+      // Snapped to whole shadow texels, so shadow edges hold still too.
+      aimSnapped(sunCamera, look, SUN, SHADOW_DEPTH / 2, (2 * SHADOW_REACH) / SHADOW_SIZE);
+      shadowUniforms.shadowMatrix.value
+        .copy(TO_TEXTURE)
+        .multiply(sunCamera.projectionMatrix)
+        .multiply(sunCamera.matrixWorldInverse);
 
+      world.overrideMaterial = depthOnly;
+      renderer.setRenderTarget(shadowTarget);
+      renderer.render(world, sunCamera);
+      world.overrideMaterial = null;
+
+      outlineMaterial.uniforms.threshold!.value = (OUTLINE_PIXELS * unit) / (FAR - NEAR);
+      renderer.setRenderTarget(target);
       renderer.render(world, camera);
+      renderer.setRenderTarget(null);
+      renderer.render(post, camera);
     },
   };
 }
