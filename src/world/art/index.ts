@@ -1,10 +1,12 @@
 import type { Scene } from '../../content/scenes';
+import { carseland } from './carseland';
 import type { IslandBuilder } from './kit';
 import { PLACEHOLDERS } from './placeholders';
 import { reformerReharp } from './reformerReharp';
 
 /** Bespoke islands, keyed by scene id. */
 export const SCENE_ART: Readonly<Partial<Record<string, IslandBuilder>>> = {
+  'reliability-engineer': carseland,
   'reformer-reharp': reformerReharp,
 };
 

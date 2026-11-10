@@ -1,5 +1,5 @@
 import { CylinderGeometry, Matrix4, Vector3 } from 'three';
-import { type IslandBuilder, islandRock, type Vec } from './kit';
+import { floatingRock, type IslandBuilder, type Vec } from './kit';
 import { MergedModel } from './merged';
 import { palette } from './palette';
 
@@ -23,8 +23,8 @@ const BOOM_TIP: Vec = [ROW_MID_X, 4.05, ROW_Z[LIFTED_ROW]!];
 const CRANE: Vec = [-0.6, 0, -2.15];
 
 function pad(model: MergedModel) {
-  model.add(palette.greyDark, islandRock, new Matrix4().makeTranslation(0, -1 - PAD, 0));
-  model.add(palette.concrete, new CylinderGeometry(2.88, 2.88, PAD, 7), new Matrix4().makeTranslation(0, -PAD / 2, 0));
+  floatingRock(model, -PAD);
+  model.add(palette.concrete, new CylinderGeometry(2.6, 2.6, PAD, 7), new Matrix4().makeTranslation(0, -PAD / 2, 0));
 }
 
 /** One row of catalyst tubes joined by a header across their tops. */
@@ -41,7 +41,7 @@ function radiantBox(model: MergedModel) {
   const bay = (z1 - z0) / 4;
   for (let i = 0; i <= 4; i++) {
     model.box(palette.steelDark, [x1 + 0.02, column[1] / 2, z0 + i * bay], column);
-    if (i < 4) model.box(palette.glow, [x1 + 0.01, 0.45, z0 + (i + 0.5) * bay], [0.03, 0.09, 0.14]);
+    if (i < 4) model.box(palette.furnace, [x1 + 0.01, 0.45, z0 + (i + 0.5) * bay], [0.03, 0.09, 0.14]);
   }
   model.box(palette.steelDark, [x0, column[1] / 2, z1 + 0.02], column);
 
