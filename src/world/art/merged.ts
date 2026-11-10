@@ -32,8 +32,9 @@ export class MergedModel {
     part.deleteAttribute('normal');
     part.deleteAttribute('uv');
     const { r, g, b } = new Color(paint.color);
-    const count = part.getAttribute('position').count;
-    part.setAttribute('color', new Float32BufferAttribute(Array.from({ length: count * 3 }, (_, i) => [r, g, b][i % 3]!), 3));
+    const colors = new Float32Array(part.getAttribute('position').count * 3);
+    for (let i = 0; i < colors.length; i += 3) colors.set([r, g, b], i);
+    part.setAttribute('color', new Float32BufferAttribute(colors, 3));
     (paint.glow ? this.glowing : this.lit).push(part);
     return this;
   }
@@ -47,9 +48,32 @@ export class MergedModel {
     return this.add(paint, box, matrix);
   }
 
+  /** A box from corner to corner, which reads more naturally for buildings than centre and size. */
+  slab(paint: Paint, [x0, y0, z0]: Vec, [x1, y1, z1]: Vec): this {
+    return this.box(paint, [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2], [Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0)]);
+  }
+
   /** A vertical cylinder centered at `center`. */
   cylinder(paint: Paint, [x, y, z]: Vec, radius: number, height: number, segments = 8): this {
     return this.add(paint, new CylinderGeometry(radius, radius, height, segments), new Matrix4().makeTranslation(x, y, z));
+  }
+
+  /** A vertical cone section centered at `center`, for vessel heads, tank roofs and hoppers. */
+  frustum(paint: Paint, [x, y, z]: Vec, top: number, bottom: number, height: number, segments = 8): this {
+    return this.add(paint, new CylinderGeometry(top, bottom, height, segments), new Matrix4().makeTranslation(x, y, z));
+  }
+
+  /** A round pipe from `from` to `to`. */
+  tube(paint: Paint, from: Vec, to: Vec, radius: number, segments = 6): this {
+    const a = new Vector3(...from);
+    const dir = new Vector3(...to).sub(a);
+    const length = dir.length();
+    const matrix = new Matrix4().compose(
+      a.addScaledVector(dir, 0.5),
+      new Quaternion().setFromUnitVectors(UP, dir.normalize()),
+      new Vector3(1, 1, 1),
+    );
+    return this.add(paint, new CylinderGeometry(radius, radius, length, segments), matrix);
   }
 
   /** A square-section bar from `from` to `to`. */
