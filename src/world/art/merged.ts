@@ -15,12 +15,12 @@ export class MergedModel {
   private glowing: BufferGeometry[] = [];
   private base = new Matrix4();
 
-  /** A view that adds into this same model with every part scaled about the origin. */
-  scaled(factor: number): MergedModel {
+  /** A view that adds into this same model with every part placed by `transform` first, for laying out a group in its own frame. */
+  within(transform: Matrix4): MergedModel {
     const view = new MergedModel();
     view.lit = this.lit;
     view.glowing = this.glowing;
-    view.base = this.base.clone().multiply(new Matrix4().makeScale(factor, factor, factor));
+    view.base = this.base.clone().multiply(transform);
     return view;
   }
 

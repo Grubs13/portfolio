@@ -4,7 +4,7 @@ import type { StageBuilder } from './kit';
 import { PLACEHOLDERS } from './placeholders';
 import { reformerReharp } from './reformerReharp';
 
-/** Bespoke islands, keyed by scene id. */
+/** Bespoke stages, keyed by scene id. */
 export const SCENE_ART: Readonly<Partial<Record<string, StageBuilder>>> = {
   'reliability-engineer': carseland,
   'reformer-reharp': reformerReharp,

@@ -4,8 +4,16 @@ import type { MergedModel } from './merged';
 import { palette, type Paint } from './palette';
 
 export type Vec = readonly [number, number, number];
-/** Builds one scene's stage, centered on its anchor with the ground at y = 0 where the character stands. */
-export type StageBuilder = () => Object3D;
+/** One scene's stage, centered on its anchor with the ground at y = 0 where the character stands. */
+export interface Stage {
+  object: Object3D;
+  /** Where the camera aims at rest, relative to the anchor, so each scene frames its own subject. */
+  look: Vec;
+}
+export type StageBuilder = () => Stage;
+
+/** A little above the character's head, which suits a scene whose subject is the character. */
+export const DEFAULT_LOOK: Vec = [0, 5, 0];
 
 export const box = new BoxGeometry(1, 1, 1);
 

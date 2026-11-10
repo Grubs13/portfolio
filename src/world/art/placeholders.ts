@@ -1,6 +1,6 @@
 import { IcosahedronGeometry, Matrix4 } from 'three';
 import type { Scene } from '../../content/scenes';
-import { type StageBuilder, stageGround } from './kit';
+import { DEFAULT_LOOK, type StageBuilder, stageGround } from './kit';
 import { MergedModel } from './merged';
 import { palette } from './palette';
 
@@ -10,8 +10,8 @@ const PROP_SCALE = 2.5;
 /** Bare ground plus props laid out at character scale and enlarged to stage scale. */
 function stage(props: (model: MergedModel) => MergedModel = (m) => m) {
   const ground = stageGround(new MergedModel());
-  props(ground.scaled(PROP_SCALE));
-  return ground.build();
+  props(ground.within(new Matrix4().makeScale(PROP_SCALE, PROP_SCALE, PROP_SCALE)));
+  return { object: ground.build(), look: DEFAULT_LOOK };
 }
 
 /** Stand-ins for scenes that have no art of their own yet. */

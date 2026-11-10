@@ -51,18 +51,18 @@ describe('scene art', () => {
   });
 
   it.each(scenes.map((s) => [s.id, s] as const))('keeps the %s stage within STAGE_RADIUS of its anchor', (_, scene) => {
-    expect(horizontalReach(stageFor(scene)())).toBeLessThanOrEqual(STAGE_RADIUS + 1e-4);
+    expect(horizontalReach(stageFor(scene)().object)).toBeLessThanOrEqual(STAGE_RADIUS + 1e-4);
   });
 
   it.each(scenesWithArt)('merges the %s art into one mesh per material, so it costs one draw call each', (_, i) => {
-    const parts = meshes(stageFor(scenes[i]!)());
+    const parts = meshes(stageFor(scenes[i]!)().object);
     expect(new Set(parts.map((m) => m.material)).size).toBe(parts.length);
   });
 
   it.each(scenesWithArt)('keeps the travel paths into and out of %s clear of its art', (_, i) => {
     const layout = layoutScenes(scenes);
     const anchor = layout.anchors[i]!;
-    const stage = stageFor(scenes[i]!)();
+    const stage = stageFor(scenes[i]!)().object;
     stage.position.set(anchor.x, anchor.y, anchor.z);
     // The path rises out of the rock below, so only parts above the walkable surface count.
     const props = triangles(stage).filter((t) => Math.max(t.a.y, t.b.y, t.c.y) > anchor.y + 0.01);
@@ -74,7 +74,8 @@ describe('scene art', () => {
           new Vector3(p.x - BODY_HALF_WIDTH, p.y + 0.05, p.z - BODY_HALF_WIDTH),
           new Vector3(p.x + BODY_HALF_WIDTH, p.y + BODY_HEIGHT, p.z + BODY_HALF_WIDTH),
         );
-        expect(props.some((t) => body.intersectsTriangle(t)), `collides at t = ${step / 100}`).toBe(false);
+        const where = [p.x - anchor.x, p.y - anchor.y, p.z - anchor.z].map((n) => n.toFixed(1)).join(', ');
+        expect(props.some((t) => body.intersectsTriangle(t)), `collides at t = ${step / 100}, (${where}) from the anchor`).toBe(false);
       }
     }
   });

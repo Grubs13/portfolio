@@ -21,17 +21,17 @@ export interface WorldLayout {
 }
 
 /** Largest horizontal extent of any scene's ground from its anchor. It covers the screen at every framing. */
-export const STAGE_RADIUS = 40;
+export const STAGE_RADIUS = 75;
 export const MIN_SPACING = 2 * STAGE_RADIUS + 8;
 
 // Horizontal axes chosen for an isometric camera looking from (+x, +y, +z):
 // LATERAL runs left to right on screen and RECEDE runs away from the viewer.
 const LATERAL = { x: Math.SQRT1_2, z: -Math.SQRT1_2 };
 const RECEDE = { x: -Math.SQRT1_2, z: -Math.SQRT1_2 };
-const SWING = 38;
+const SWING = 70;
 const RISE = 10;
-const DEPTH = 50;
-const ARC = 40;
+const DEPTH = 80;
+const ARC = 75;
 
 /**
  * Places scenes on an ascending zig-zag: alternating left and right while

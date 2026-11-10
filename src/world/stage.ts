@@ -38,8 +38,7 @@ export interface Stage {
 const ISO_DIRECTION = new Vector3(1, 1, 1).normalize();
 const CAMERA_DISTANCE = 100;
 /** World units that must fit across the free part of the screen. */
-const FRAME = 16;
-const LOOK_HEIGHT = 1;
+const FRAME = 26;
 const TRAVEL_ZOOM_OUT = 0.3;
 /** A three-quarter view: turned from the camera, which looks from +x +z, so one side shows. */
 const IDLE_YAW = Math.PI / 4 + 0.5;
@@ -52,7 +51,7 @@ const FAR = CAMERA_DISTANCE * 5;
 /** Depth steps smaller than this many art pixels are surface slope, not a silhouette. */
 const OUTLINE_PIXELS = 3;
 /** Half the width of ground the shadow map covers around the character, and its resolution. */
-const SHADOW_REACH = 36;
+const SHADOW_REACH = 44;
 const SHADOW_SIZE = 1024;
 const SHADOW_DEPTH = 300;
 /** Stars sit on their own layer so they cast no shadows. */
@@ -151,9 +150,12 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
   });
 
   const world = new ThreeScene();
+  const looks: Vector3[] = [];
+  const lookBlend = new Vector3();
   scenes.forEach((scene, i) => {
     const anchor = layout.anchors[i]!;
-    const stageObject = stageFor(scene)();
+    const { object: stageObject, look } = stageFor(scene)();
+    looks.push(new Vector3(...look));
     stageObject.position.set(anchor.x, anchor.y, anchor.z);
     world.add(stageObject);
   });
@@ -218,7 +220,9 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
       camera.bottom = -(1 - focus.y) * viewHeight;
       camera.updateProjectionMatrix();
 
-      look.set(subject.x, subject.y + LOOK_HEIGHT, subject.z);
+      const offset =
+        state.phase === 'dwell' ? looks[state.scene]! : lookBlend.lerpVectors(looks[state.from]!, looks[state.to]!, state.t);
+      look.set(subject.x, subject.y, subject.z).add(offset);
       const unit = viewHeight / rows;
       // Snapped to whole art pixels, so still geometry does not shimmer as the camera pans.
       aimSnapped(camera, look, ISO_DIRECTION, CAMERA_DISTANCE, unit);
