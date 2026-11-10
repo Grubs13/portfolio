@@ -19,7 +19,7 @@ import type { Scene } from '../content/scenes';
 import type { TimelineState } from '../lib/timeline';
 import { stageFor } from './art';
 import { buildCharacter, type Character } from './art/character';
-import { outlineMaterial, shadowUniforms, SUN } from './art/materials';
+import { compositeMaterial, shadowUniforms, SUN } from './art/materials';
 import { pointOnSegment, segmentTangent, type Vec3, type WorldLayout } from './layout';
 
 /** Where on screen the subject is framed, as fractions of width and of height from the top. */
@@ -41,21 +41,33 @@ const CAMERA_DISTANCE = 100;
 const FRAME = 26;
 const TRAVEL_ZOOM_OUT = 0.3;
 /** A three-quarter view: turned from the camera, which looks from +x +z, so one side shows. */
-const IDLE_YAW = Math.PI / 4 + 0.5;
+const IDLE_YAW = Math.PI / 4 + 0.4;
 const LEAN = 0.45;
+const IDLE_ELBOW = 0.15;
 const SWINGS_PER_TRAVEL = 3;
-/** CSS pixels per art pixel. Phones get finer pixels so the character keeps its detail. */
+/** CSS pixels per art pixel of the world. Phones get finer pixels so the scenes keep their detail. */
 const pixelSize = (width: number) => (width < 768 ? 2 : 3);
+/**
+ * How many times finer than the world the character is drawn. At the world's
+ * pixel size he would be only about twenty pixels tall, too few for a face,
+ * hands or bent limbs, so like the fighters in a hand-drawn isometric game he
+ * gets a finer grid than the ground he stands on.
+ */
+const FIGURE_DETAIL = 2;
 const NEAR = 0.1;
 const FAR = CAMERA_DISTANCE * 5;
 /** Depth steps smaller than this many art pixels are surface slope, not a silhouette. */
 const OUTLINE_PIXELS = 3;
+/** The same for the character, in his finer pixels: an arm in front of his chest is a silhouette, a rounded shoulder is not. */
+const FIGURE_OUTLINE_PIXELS = 4;
 /** Half the width of ground the shadow map covers around the character, and its resolution. */
 const SHADOW_REACH = 44;
 const SHADOW_SIZE = 1024;
 const SHADOW_DEPTH = 300;
 /** Stars sit on their own layer so they cast no shadows. */
 const SKY_LAYER = 1;
+/** The character sits on his own layer, drawn in the finer pass and into the shadow map. */
+const FIGURE_LAYER = 2;
 /** Maps clip space to texture space, so the shader can look up the shadow map. */
 const TO_TEXTURE = new Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
 
@@ -95,7 +107,9 @@ function poseCharacter(c: Character, layout: WorldLayout, state: TimelineState):
     c.root.position.set(anchor.x, anchor.y, anchor.z);
     c.root.rotation.y = IDLE_YAW;
     c.body.rotation.x = 0;
-    for (const limb of [...c.arms, ...c.legs]) limb.rotation.x = 0;
+    for (const limb of [...c.arms, ...c.legs, ...c.shins]) limb.rotation.x = 0;
+    // Elbows soft rather than locked, as a person stands.
+    for (const forearm of c.forearms) forearm.rotation.x = -IDLE_ELBOW;
     c.flame.visible = false;
     return anchor;
   }
@@ -113,8 +127,13 @@ function poseCharacter(c: Character, layout: WorldLayout, state: TimelineState):
   c.body.rotation.x = LEAN * flight;
   c.arms[0].rotation.x = 0.7 * swing;
   c.arms[1].rotation.x = -0.7 * swing;
+  // Elbows bend most on the forward swing, knees fold back under him in flight.
+  c.forearms[0].rotation.x = -IDLE_ELBOW - flight * (0.35 + 0.3 * Math.max(0, swing));
+  c.forearms[1].rotation.x = -IDLE_ELBOW - flight * (0.35 + 0.3 * Math.max(0, -swing));
   c.legs[0].rotation.x = 0.5 * flight + 0.25 * swing;
   c.legs[1].rotation.x = 0.5 * flight - 0.25 * swing;
+  c.shins[0].rotation.x = flight * (0.55 + 0.25 * Math.max(0, -swing));
+  c.shins[1].rotation.x = flight * (0.55 + 0.25 * Math.max(0, swing));
   c.flame.visible = flight > 0.02;
   c.flame.scale.y = flight;
   return p;
@@ -165,10 +184,17 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
   world.add(stars);
 
   const character = buildCharacter();
+  character.root.traverse((part) => part.layers.set(FIGURE_LAYER));
   world.add(character.root);
+  const figureTarget = new WebGLRenderTarget(1, 1, {
+    minFilter: NearestFilter,
+    magFilter: NearestFilter,
+    depthTexture: new DepthTexture(1, 1),
+  });
 
   // Sunlight shadows come from a depth map rendered from the sun, centered on the character.
   const sunCamera = new OrthographicCamera(-SHADOW_REACH, SHADOW_REACH, SHADOW_REACH, -SHADOW_REACH, 1, SHADOW_DEPTH);
+  sunCamera.layers.enable(FIGURE_LAYER);
   const shadowTarget = new WebGLRenderTarget(SHADOW_SIZE, SHADOW_SIZE, { depthTexture: new DepthTexture(SHADOW_SIZE, SHADOW_SIZE) });
   const depthOnly = new MeshBasicMaterial({ colorWrite: false });
   shadowUniforms.tShadow.value = shadowTarget.depthTexture;
@@ -177,11 +203,14 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
   const post = new ThreeScene();
   const triangle = new BufferGeometry();
   triangle.setAttribute('position', new Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
-  const outline = new Mesh(triangle, outlineMaterial);
-  outline.frustumCulled = false;
-  post.add(outline);
-  outlineMaterial.uniforms.tColor!.value = target.texture;
-  outlineMaterial.uniforms.tDepth!.value = target.depthTexture;
+  const composite = new Mesh(triangle, compositeMaterial);
+  composite.frustumCulled = false;
+  post.add(composite);
+  const uniforms = compositeMaterial.uniforms;
+  uniforms.tColor!.value = target.texture;
+  uniforms.tDepth!.value = target.depthTexture;
+  uniforms.tFigure!.value = figureTarget.texture;
+  uniforms.tFigureDepth!.value = figureTarget.depthTexture;
 
   const camera = new OrthographicCamera(-1, 1, 1, -1, NEAR, FAR);
   camera.layers.enable(SKY_LAYER);
@@ -191,16 +220,24 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
   let focus: Focus = { x: 0.5, y: 0.5 };
 
   return {
-    ready: Promise.all([renderer.compileAsync(world, camera), renderer.compileAsync(post, camera)]),
+    // The camera sees every layer while compiling, so the character's shaders are ready too.
+    ready: (() => {
+      camera.layers.enable(FIGURE_LAYER);
+      const compiled = Promise.all([renderer.compileAsync(world, camera), renderer.compileAsync(post, camera)]);
+      camera.layers.disable(FIGURE_LAYER);
+      return compiled;
+    })(),
 
     resize(width, height, nextFocus) {
       const px = pixelSize(width);
       const columns = Math.max(1, Math.round(width / px));
       rows = Math.max(1, Math.round(height / px));
       renderer.setPixelRatio(1);
-      renderer.setSize(columns, rows, false);
+      renderer.setSize(columns * FIGURE_DETAIL, rows * FIGURE_DETAIL, false);
       target.setSize(columns, rows);
-      outlineMaterial.uniforms.texel!.value.set(1 / columns, 1 / rows);
+      figureTarget.setSize(columns * FIGURE_DETAIL, rows * FIGURE_DETAIL);
+      uniforms.texel!.value.set(1 / columns, 1 / rows);
+      uniforms.figureTexel!.value.set(1 / (columns * FIGURE_DETAIL), 1 / (rows * FIGURE_DETAIL));
       aspect = width / height;
       focus = nextFocus;
     },
@@ -238,9 +275,16 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
       renderer.render(world, sunCamera);
       world.overrideMaterial = null;
 
-      outlineMaterial.uniforms.threshold!.value = (OUTLINE_PIXELS * unit) / (FAR - NEAR);
+      uniforms.threshold!.value = (OUTLINE_PIXELS * unit) / (FAR - NEAR);
+      uniforms.figureThreshold!.value = (FIGURE_OUTLINE_PIXELS * unit) / FIGURE_DETAIL / (FAR - NEAR);
+      uniforms.contact!.value = (2 * unit) / (FAR - NEAR);
       renderer.setRenderTarget(target);
       renderer.render(world, camera);
+      camera.layers.set(FIGURE_LAYER);
+      renderer.setRenderTarget(figureTarget);
+      renderer.render(world, camera);
+      camera.layers.set(0);
+      camera.layers.enable(SKY_LAYER);
       renderer.setRenderTarget(null);
       renderer.render(post, camera);
     },

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { type Scene, scenes } from '../../content/scenes';
 import { STAGE_RADIUS, layoutScenes, pointOnSegment } from '../layout';
 import { stageFor, SCENE_ART } from '.';
+import { buildCharacter } from './character';
 import { PLACEHOLDERS } from './placeholders';
 
 // Generous bounds of the character in any travel pose, measured from its feet.
@@ -81,3 +82,14 @@ describe('scene art', () => {
     }
   });
 });
+
+describe('character', () => {
+  it('stands on the ground at rest and fits the body bounds the travel paths are checked with', () => {
+    const { root } = buildCharacter();
+    const bounds = new Box3().setFromObject(root);
+    expect(bounds.min.y).toBeCloseTo(0, 2);
+    expect(bounds.max.y).toBeLessThan(BODY_HEIGHT);
+    for (const v of [bounds.min.x, bounds.max.x, bounds.min.z, bounds.max.z]) expect(Math.abs(v)).toBeLessThan(BODY_HALF_WIDTH);
+  });
+});
+

@@ -111,7 +111,9 @@ export const palette = {
   deereYellow: paint(0xf0c832),
   caseRed: paint(0xc23a2c),
 
-  navy: paint(0x26325a),
+  navy: paint(0x3a4c86),
+  pants: paint(0x34417a),
+  belt: paint(0x6b4a30),
   hiVis: paint(0xd4f03a),
   reflective: paint(0xc5ccd6),
   skin: paint(0xe3b48d),
@@ -123,6 +125,7 @@ export const palette = {
   lens: paint(0x9db9dc),
   undershirt: paint(0xcdbb9c),
   boots: paint(0xa97c4e),
+  sole: paint(0x4a3a2e),
   pack: paint(0x4b5165),
   lamp: glow(0xfff2c2),
   detectorLed: glow(0x5cff7a),

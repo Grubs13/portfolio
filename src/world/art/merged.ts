@@ -1,4 +1,16 @@
-import { type BufferGeometry, Color, CylinderGeometry, Euler, Float32BufferAttribute, Group, Matrix4, Mesh, Quaternion, Vector3 } from 'three';
+import {
+  type BufferGeometry,
+  Color,
+  CylinderGeometry,
+  Euler,
+  Float32BufferAttribute,
+  Group,
+  Matrix4,
+  Mesh,
+  Quaternion,
+  SphereGeometry,
+  Vector3,
+} from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { box, type Vec } from './kit';
 import { glowMaterial, litMaterial } from './materials';
@@ -74,6 +86,38 @@ export class MergedModel {
       new Vector3(1, 1, 1),
     );
     return this.add(paint, new CylinderGeometry(radius, radius, length, segments), matrix);
+  }
+
+  /** A round limb from `from` to `to` that tapers from radius `r0` to `r1`, for arms, legs and necks. */
+  limb(paint: Paint, from: Vec, to: Vec, r0: number, r1: number, segments = 8): this {
+    const a = new Vector3(...from);
+    const dir = new Vector3(...to).sub(a);
+    const length = dir.length();
+    const matrix = new Matrix4().compose(
+      a.addScaledVector(dir, 0.5),
+      new Quaternion().setFromUnitVectors(UP, dir.normalize()),
+      new Vector3(1, 1, 1),
+    );
+    // A cylinder's top sits at +y, which the rotation carries to `to`.
+    return this.add(paint, new CylinderGeometry(r1, r0, length, segments), matrix);
+  }
+
+  /** An ellipsoid with the given radii along x, y and z, for heads, joints, hands and muscle. */
+  ellipsoid(paint: Paint, [x, y, z]: Vec, [rx, ry, rz]: Vec, segments = 8): this {
+    const matrix = new Matrix4().compose(new Vector3(x, y, z), new Quaternion(), new Vector3(rx, ry, rz));
+    return this.add(paint, new SphereGeometry(1, segments, Math.max(3, Math.round((segments * 3) / 4))), matrix);
+  }
+
+  /** A flat strip from `from` to `to`, `width` across x and `depth` thick along z, for straps and reflective tape. */
+  strip(paint: Paint, from: Vec, to: Vec, width: number, depth: number): this {
+    const a = new Vector3(...from);
+    const dir = new Vector3(...to).sub(a);
+    const matrix = new Matrix4().compose(
+      a.addScaledVector(dir, 0.5),
+      new Quaternion().setFromUnitVectors(UP, dir.clone().normalize()),
+      new Vector3(width, dir.length(), depth),
+    );
+    return this.add(paint, box, matrix);
   }
 
   /** A square-section bar from `from` to `to`. */
