@@ -54,10 +54,10 @@ def layout(K):
     hook2 = crawler_crane(K, -19, 8.2, (mx, 23.5, mz), 13.5, 0.95)
     slings(K, hook2, [Vector(c) for c in corners])
 
-    # The unit packed in behind, as on site: the main pipe rack with air coolers a few metres off the back
+    # The unit packed in behind, as on site: the main pipe rack a few metres off the back
     # wall, pump rows under its edge, the CO2 columns, shift converters and the steam-drum structure beyond it,
     # the compressor house, a cross rack past the burner end, and the cooling tower at the back of the pad.
-    K.pipe_rack((-16, -44), (-16, 0), width=2.6, tiers=(2.2, 3.0, 3.8), seed=7, fans=5)
+    K.pipe_rack((-16, -44), (-16, 0), width=2.6, tiers=(2.2, 3.0, 3.8), seed=7)
     K.pipe_rack((-46, -37.5), (-17.4, -37.5), width=2.2, tiers=(2.2, 3.0), seed=8)
     K.pumps(-18.6, -30, 9, 1.5, along_x=False)
     K.vessel(-21.5, -8, 0.9, 11.5, platforms=(0.3, 0.55, 0.8, 0.98), davit=True)

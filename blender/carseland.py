@@ -33,7 +33,7 @@ def layout(K):
     K.fence([(X0, Z0), (X1, Z0), (X1, Z1), (X0, Z1), (X0, Z0)], 0.8)
 
     # ---- the main pipe rack, the spine of the site, and its branches ----
-    K.pipe_rack((-44, -4.5), (30, -4.5), width=2.6, tiers=(2.0, 2.8, 3.5), bent=2.2, seed=3, fans=6)
+    K.pipe_rack((-44, -4.5), (30, -4.5), width=2.6, tiers=(2.0, 2.8, 3.5), bent=2.2, seed=3)
     K.pipe_rack((6.8 + 1.3, -24), (6.8 + 1.3, -6), width=2.0, tiers=(2.0, 2.7), seed=4)
     K.pipe_rack((-31, -26), (-31, -6), width=2.0, tiers=(2.0, 2.7), seed=5)
     K.pipe_rack((30, -4.5), (52, -4.5), width=1.8, tiers=(1.8, 2.5), seed=6)
