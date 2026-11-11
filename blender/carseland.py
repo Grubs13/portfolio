@@ -8,6 +8,8 @@ from mathutils import Vector
 S = 0.18
 # People and their clutter at plant scale.
 SET_SCALE = 0.62
+# Workers are only a dozen art pixels tall here, so they skip the detail that would not show.
+WORKER_DETAIL = 'light'
 
 def layout(K):
     rnd = K.rnd

@@ -81,8 +81,8 @@ POSES = ('stand', 'walk', 'carry', 'point', 'crouch')
 # Scenes at plant scale shrink people and their clutter so they sit right beside the equipment.
 SET_SCALE = 1.0
 # 'light' builds workers for scenes where they are only a few pixels tall: no smoothing pass on the body,
-# a coarser head and hat, and no nose, glasses or modelled hands.
-WORKER_DETAIL = globals().get('WORKER_DETAIL', 'full')
+# a coarser head and hat, and no nose, glasses or modelled hands. A scene sets it like SET_SCALE.
+WORKER_DETAIL = 'full'
 # A worker's height to the top of the hard hat, standing, at SET_SCALE 1.
 WORKER_HEIGHT = 1.95
 HEAD = Vector((0, 0, 1.86))
