@@ -23,7 +23,7 @@ The scenes and the character are modelled in Blender by these scripts and loaded
 - `figure.py`: the figure Calen and the workers share. It holds the stick skeleton (`JOINTS`, `BONES`), forward kinematics for a pose, the Skin-modifier body painted by rest position, and `rider`, which carries a part on a joint.
 - `detail.py`: crews, clutter, pebbles, grass and the `Site` that keeps them clear of placed equipment.
 - `carseland.py`, `reformer.py` and `reliability.py`: the scene layouts. `reliability.py` is laid out round Calen kneeling at an open exchanger flange, at 0.9 units per metre with `SET_SCALE` 1.6 so the crews match him. Its `YAW` must match the `cast` yaw for `reliability-engineer` in `src/world/art/sceneModel.ts`.
-- `character.py`: Calen, `figure.py`'s body at three subdivision levels with his modelled head, hands, boots and gear.
+- `character.py`: Calen, built like the workers at their proportions (`figure.py`'s body lightly smoothed so it keeps crisp facets, painted boots, mitten hands), with his own head, hat, glasses and gear. The site shades him with the faceted scene shader.
 
 ## Character poses
 
