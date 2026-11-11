@@ -51,6 +51,8 @@ const OUTLINE_PIXELS = 3;
 const SHADOW_REACH = 44;
 const SHADOW_SIZE = 1024;
 const SHADOW_DEPTH = 300;
+/** The scene buffer grows in steps of this many art pixels, so small viewport changes do not reallocate it. */
+const BUFFER_STEP = 64;
 /** Maps clip space to texture space, so the shader can look up the shadow map. */
 const TO_TEXTURE = new Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
 
@@ -78,18 +80,25 @@ export function createStage(
   /** Stages loaded from scene models, keyed by scene id. */
   loaded: Partial<Record<string, StageBuilder>> = {},
 ): Stage {
-  // Each scene renders at art-pixel resolution into a target, the screen pass
-  // inks it and writes that same resolution to the canvas, and CSS scales the
-  // canvas up with hard pixel edges. Fewer pixels make it cheaper than a
-  // full-size render. Between scenes, the outgoing and incoming scenes each
-  // render into their own target and the screen pass wipes from one to the other.
+  // Scenes render at art-pixel resolution into one buffer, the outgoing scene in
+  // its left half and the incoming one in its right; the screen pass inks them,
+  // wipes from one to the other and writes that same resolution to the canvas,
+  // and CSS scales the canvas up with hard pixel edges. Fewer pixels make it
+  // cheaper than a full-size render. The buffer grows in steps and never
+  // shrinks, because phones resize the viewport on almost every frame of a
+  // scroll as their toolbars slide away, and reallocating it each time is slow.
   const renderer = new WebGLRenderer({ canvas, alpha: true, antialias: false, powerPreference: 'low-power' });
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = LinearSRGBColorSpace;
-  const sceneTarget = () =>
-    new WebGLRenderTarget(1, 1, { minFilter: NearestFilter, magFilter: NearestFilter, depthTexture: new DepthTexture(1, 1) });
-  const outgoing = sceneTarget();
-  const incoming = sceneTarget();
+  const buffer = new WebGLRenderTarget(1, 1, {
+    minFilter: NearestFilter,
+    magFilter: NearestFilter,
+    depthTexture: new DepthTexture(1, 1),
+  });
+  buffer.scissorTest = true;
+  /** Width of each half of the buffer, and its height, in art pixels. */
+  let half = 1;
+  let bufferHeight = 1;
 
   const world = new ThreeScene();
   const looks: Vector3[] = [];
@@ -117,14 +126,13 @@ export function createStage(
   screen.frustumCulled = false;
   post.add(screen);
   const uniforms = screenMaterial.uniforms;
-  uniforms.tColorA!.value = outgoing.texture;
-  uniforms.tDepthA!.value = outgoing.depthTexture;
-  uniforms.tColorB!.value = incoming.texture;
-  uniforms.tDepthB!.value = incoming.depthTexture;
+  uniforms.tColor!.value = buffer.texture;
+  uniforms.tDepth!.value = buffer.depthTexture;
 
   const camera = new OrthographicCamera(-1, 1, 1, -1, NEAR, FAR);
   const look = new Vector3();
   let aspect = 1;
+  let columns = 1;
   let rows = 1;
   let focuses: readonly Focus[] = [];
 
@@ -143,8 +151,8 @@ export function createStage(
     return viewHeight / rows;
   }
 
-  /** Renders scene `i` into `target`, the character standing at its anchor, and returns world units per art pixel. */
-  function draw(i: number, target: WebGLRenderTarget): number {
+  /** Renders scene `i` into half `side` of the buffer (0 left, 1 right), the character standing at its anchor, and returns world units per art pixel. */
+  function draw(i: number, side: 0 | 1): number {
     const unit = frame(focuses[i] ?? { x: 0.5, y: 0.5 });
     const anchor = layout.anchors[i]!;
     character.root.position.set(anchor.x, anchor.y, anchor.z);
@@ -158,7 +166,9 @@ export function createStage(
     renderer.setRenderTarget(shadowTarget);
     renderer.render(world, sunCamera);
     world.overrideMaterial = null;
-    renderer.setRenderTarget(target);
+    buffer.viewport.set(side * half, 0, columns, rows);
+    buffer.scissor.set(side * half, 0, columns, rows);
+    renderer.setRenderTarget(buffer);
     renderer.render(world, camera);
     return unit;
   }
@@ -167,13 +177,18 @@ export function createStage(
     ready: Promise.all([renderer.compileAsync(world, camera), renderer.compileAsync(post, camera)]),
 
     resize(width, height, nextFocuses) {
-      const columns = Math.max(1, Math.round(width / PIXEL_SIZE));
+      columns = Math.max(1, Math.round(width / PIXEL_SIZE));
       rows = Math.max(1, Math.round(height / PIXEL_SIZE));
       renderer.setPixelRatio(1);
       renderer.setSize(columns, rows, false);
-      outgoing.setSize(columns, rows);
-      incoming.setSize(columns, rows);
-      uniforms.texel!.value.set(1 / columns, 1 / rows);
+      const step = (n: number) => Math.ceil(n / BUFFER_STEP) * BUFFER_STEP;
+      if (columns > half || rows > bufferHeight) {
+        half = Math.max(half, step(columns));
+        bufferHeight = Math.max(bufferHeight, step(rows));
+        buffer.setSize(2 * half, bufferHeight);
+      }
+      uniforms.texel!.value.set(1 / (2 * half), 1 / bufferHeight);
+      uniforms.extent!.value.set(columns / (2 * half), rows / bufferHeight);
       aspect = width / height;
       focuses = nextFocuses;
     },
@@ -182,11 +197,11 @@ export function createStage(
       // Mirrored framings share a scale, so one outline threshold suits both scenes in a wipe.
       let unit: number;
       if (state.phase === 'dwell') {
-        unit = draw(state.scene, outgoing);
+        unit = draw(state.scene, 0);
         uniforms.progress!.value = 0;
       } else {
-        unit = draw(state.from, outgoing);
-        draw(state.to, incoming);
+        unit = draw(state.from, 0);
+        draw(state.to, 1);
         uniforms.progress!.value = state.t;
       }
       uniforms.threshold!.value = (OUTLINE_PIXELS * unit) / (FAR - NEAR);

@@ -43,6 +43,8 @@ async function start(canvas: HTMLCanvasElement) {
     };
 
     addEventListener('scroll', () => schedule(false), { passive: true });
+    // Phones may drop the WebGL context to reclaim memory; three.js rebuilds it, and the frame needs drawing again.
+    canvas.addEventListener('webglcontextrestored', () => schedule(true));
     addEventListener('resize', () => schedule(true));
     new ResizeObserver(() => schedule(true)).observe(document.querySelector('main')!);
     root.classList.add('world-ready');
