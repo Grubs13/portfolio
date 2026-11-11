@@ -5,7 +5,7 @@
 #   exec(open(f'{DIR}/run.py').read(), {'DIR': DIR, 'SCENE': 'carseland'})
 import io, contextlib, json, os, random, time
 
-for f in ('build.py', 'detail.py', 'plantkit.py', f'{SCENE}.py'):
+for f in ('build.py', 'figure.py', 'detail.py', 'plantkit.py', f'{SCENE}.py'):
     exec(open(f'{DIR}/{f}').read(), globals())
 
 started = time.time()
