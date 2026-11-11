@@ -1,10 +1,11 @@
 import { readFile } from 'node:fs/promises';
-import { Mesh, type Object3D, Triangle, Vector3 } from 'three';
+import { Box3, Mesh, type Object3D, Triangle, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { type Scene, scenes } from '../../content/scenes';
 import { STAGE_RADIUS } from '../layout';
 import { stageFor, SCENE_ART } from '.';
 import type { StageBuilder } from './kit';
+import { CHARACTER_MODEL, characterFromGltf } from './model';
 import { PLACEHOLDERS } from './placeholders';
 import { SCENE_MODELS, sceneLoader, stageFromGltf } from './sceneModel';
 
@@ -35,14 +36,17 @@ function horizontalReach(object: Object3D): number {
   return triangles(object).reduce((reach, t) => Math.max(reach, ...[t.a, t.b, t.c].map((v) => Math.hypot(v.x, v.z))), 0);
 }
 
-/** Each scene model read from `public/`, as the browser would load it. */
+/** A model read from `public/`, as the browser would load it. */
+async function parseFromDisk(url: string) {
+  const file = await readFile(new URL(`../../../public${url}`, import.meta.url));
+  return (await sceneLoader()).parseAsync(file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength), '');
+}
+
 async function loadFromDisk(): Promise<Partial<Record<string, StageBuilder>>> {
-  const loader = await sceneLoader();
   const loaded: Partial<Record<string, StageBuilder>> = {};
   for (const [id, model] of Object.entries(SCENE_MODELS)) {
     if (!model) continue;
-    const file = await readFile(new URL(`../../../public${model.url}`, import.meta.url));
-    const gltf = await loader.parseAsync(file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength), '');
+    const gltf = await parseFromDisk(model.url);
     loaded[id] = () => stageFromGltf(gltf.scene, model);
   }
   return loaded;
@@ -79,5 +83,26 @@ describe('scene art', () => {
   it.each(scenesWithArt)('merges the %s art into one mesh per material, so it costs one draw call each', (_, i) => {
     const parts = meshes(build(scenes[i]!).object);
     expect(new Set(parts.map((m) => m.material)).size).toBe(parts.length);
+  });
+});
+
+describe('character model', () => {
+  const shown = (o: Object3D | null): boolean => !o || (o.visible && shown(o.parent));
+  const poseOf = (o: Object3D | null): string | undefined => (!o ? undefined : o.name.startsWith('pose_') ? o.name.slice(5) : poseOf(o.parent));
+
+  it('shows only the named pose, sized by the standing one', async () => {
+    const model = CHARACTER_MODEL!;
+    const character = characterFromGltf((await parseFromDisk(model.url)).scene, model);
+    const visible = () => meshes(character.root).filter(shown);
+    const height = () => visible().reduce((box, m) => box.expandByObject(m), new Box3()).getSize(new Vector3()).y;
+
+    character.pose('inspect');
+    expect(visible().length).toBeGreaterThan(0);
+    expect(new Set(visible().map(poseOf))).toEqual(new Set(['inspect']));
+    expect(height()).toBeLessThan(model.height * 0.85);
+
+    character.pose('stand');
+    expect(new Set(visible().map(poseOf))).toEqual(new Set(['stand']));
+    expect(height()).toBeCloseTo(model.height, 5);
   });
 });
