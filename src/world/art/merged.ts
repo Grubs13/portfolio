@@ -35,9 +35,11 @@ export class MergedModel {
     if (!this.smooth || paint.glow) part.deleteAttribute('normal');
     part.deleteAttribute('uv');
     const { r, g, b } = new Color(paint.color);
-    const colors = new Float32Array(part.getAttribute('position').count * 3);
+    const count = part.getAttribute('position').count;
+    const colors = new Float32Array(count * 3);
     for (let i = 0; i < colors.length; i += 3) colors.set([r, g, b], i);
     part.setAttribute('color', new Float32BufferAttribute(colors, 3));
+    part.setAttribute('surface', new Float32BufferAttribute(new Float32Array(count).fill(paint.surface ?? 0), 1));
     (paint.glow ? this.glowing : this.lit).push(part);
     return this;
   }

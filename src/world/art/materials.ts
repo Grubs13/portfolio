@@ -14,11 +14,14 @@ float bayer() {
 
 const vertexShader = /* glsl */ `
 uniform mat4 shadowMatrix;
+attribute float surface;
+varying float vSurface;
 varying vec3 vColor;
 varying vec3 vWorld;
 varying vec3 vShadow;
 void main() {
   vColor = color;
+  vSurface = surface;
   vec4 world = modelMatrix * vec4(position, 1.);
   vWorld = world.xyz;
   vShadow = (shadowMatrix * world).xyz;
@@ -58,6 +61,7 @@ void main() {
 // blotches of checker dither and speckle, fixed in world space so they hold
 // still as the camera pans.
 const litFragment = (smooth: boolean) => /* glsl */ `
+${smooth ? '' : 'varying float vSurface;'}
 uniform vec3 sun;
 uniform sampler2D tShadow;
 uniform float shadowBias;
@@ -72,6 +76,66 @@ float blotches(vec2 p) {
   vec2 f = smoothstep(0., 1., fract(p));
   return mix(mix(hash(i), hash(i + vec2(1., 0.)), f.x), mix(hash(i + vec2(0., 1.)), hash(i + 1.), f.x), f.y);
 }
+${
+  smooth
+    ? ''
+    : `
+// Pixel texture by surface type (see SURFACE in palette.ts), all fixed in world space so it holds still as the camera pans.
+vec3 surfaceTexture(vec3 c, vec3 n, int kind) {
+  bool checker = mod(gl_FragCoord.x + gl_FragCoord.y, 2.) < 1.;
+  if (n.y > 0.9) {
+    vec2 p = vWorld.xz;
+    vec2 cell = floor(p * 9.);
+    float b = blotches(p * 0.7) * 0.7 + blotches(p * 2.3) * 0.3;
+    if (b > 0.7 || (b > 0.6 && checker)) c *= 0.92;
+    else if (b < 0.24 && checker) c = min(c * 1.05, 1.);
+    if (hash(cell) > 0.96) c *= 0.84;
+    if (kind == 4) {
+      // Gravel: dense pebbles in a dark and a light tone, and tyre-worn bands.
+      float h = hash(floor(p * 14.));
+      if (h > 0.86) c *= 0.82; else if (h < 0.1) c = min(c * 1.1, 1.);
+    } else if (kind == 5) {
+      // Grass and crop: flecks of lighter and darker blades, and mown swaths.
+      float h = hash(floor(p * 12.) + 7.);
+      if (h > 0.82) c = min(c * 1.13 + vec3(0.02, 0.03, 0.), 1.); else if (h < 0.16) c *= 0.86;
+      if (blotches(p * 0.18) > 0.62 && checker) c *= 0.94;
+    } else if (kind == 6) {
+      // Water: dithered ripple lines catching the sky, and deeper patches.
+      float r = fract(p.y * 1.3 + sin(p.x * 0.9) * 0.35 + blotches(p * 0.5) * 0.6);
+      if (r < 0.07 && checker) c = min(c * 1.25 + 0.06, 1.);
+      if (blotches(p * 0.25) > 0.6) c *= 0.9;
+    } else if (kind == 7) {
+      // Concrete and asphalt: stains and hairline joints.
+      if (fract(p.x * 0.25) < 0.025 || fract(p.y * 0.25) < 0.025) c *= 0.88;
+      if (blotches(p * 1.1) > 0.68 && checker) c *= 0.93;
+    }
+    return c;
+  }
+  if (abs(n.y) > 0.5) return c;
+  // Walls: u runs along the wall, v up it.
+  float u = dot(vWorld.xz, vec2(-n.z, n.x));
+  float v = vWorld.y;
+  if (kind == 1) {
+    // Cladding ribs, with a darker drip line under every sheet lap.
+    if (fract(u * 3.) < 0.34) c *= 0.88;
+    if (fract(v * 0.22) < 0.03) c *= 0.85;
+  } else if (kind == 2) {
+    // Bolted panels, rust streaking down from the seams.
+    bool seam = fract(u / 1.4) < 0.06 || fract(v / 1.1) < 0.07;
+    if (seam) c *= 0.78;
+    float streak = blotches(vec2(u * 3.2, v * 0.35)) * blotches(vec2(u * 0.9, v * 0.9 + 3.));
+    if (streak > 0.38) c = mix(c, c * vec3(0.78, 0.6, 0.5), checker ? 0.7 : 0.45);
+    else if (streak < 0.06 && checker) c = min(c * 1.07, 1.);
+  } else if (kind == 3) {
+    // Rolled shell courses with staggered vertical welds.
+    float course = floor(v / 1.5);
+    if (fract(v / 1.5) < 0.04) c *= 0.84;
+    if (fract(u / 2.2 + course * 0.5) < 0.02) c *= 0.88;
+    if (blotches(vec2(u * 0.8, v * 0.5)) > 0.7 && checker) c *= 0.94;
+  }
+  return c;
+}`
+}
 void main() {
   vec3 n = ${smooth ? 'normalize(vNormal)' : 'normalize(cross(dFdx(vWorld), dFdy(vWorld)))'};
   // Characters get a lift, so only the side turned right away from the sun falls into deep shade.
@@ -84,14 +148,7 @@ void main() {
   ${
     smooth
       ? ''
-      : `if (n.y > 0.9) {
-    vec2 cell = floor(vWorld.xz * 9.);
-    float b = blotches(vWorld.xz * 0.7) * 0.7 + blotches(vWorld.xz * 2.3) * 0.3;
-    bool checker = mod(cell.x + cell.y, 2.) < 1.;
-    if (b > 0.7 || (b > 0.6 && checker)) c *= 0.92;
-    else if (b < 0.24 && checker) c = min(c * 1.05, 1.);
-    if (hash(cell) > 0.96) c *= 0.84;
-  }`
+      : `c = surfaceTexture(c, n, int(vSurface + 0.5));`
   }
   gl_FragColor = vec4(c, 1.);
 }

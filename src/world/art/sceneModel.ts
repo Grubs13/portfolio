@@ -2,6 +2,7 @@ import { BufferGeometry, Color, Float32BufferAttribute, Mesh, type MeshStandardM
 import type { Scene } from '../../content/scenes';
 import { type Stage, type StageBuilder, stageGround, type Vec } from './kit';
 import { MergedModel } from './merged';
+import { palette, type Paint } from './palette';
 
 /**
  * A scene's stage modelled in Blender and exported as a GLB, standing on the
@@ -19,6 +20,12 @@ export const SCENE_MODELS: Readonly<Partial<Record<string, SceneModel>>> = {
   'reliability-engineer': { url: '/models/carseland.glb', look: [-2, 7, -4] },
   'reformer-reharp': { url: '/models/reformer-reharp.glb', look: [-6.31, 7, 0.38] },
 };
+
+/** The pixel texture of the palette paint a Blender material is named after, as `paint_<name>`. */
+function surfaceOf(name = ''): Pick<Paint, 'surface'> {
+  const paint = (palette as Record<string, Paint>)[name.replace(/^paint_/, '').replace(/_glow$/, '')];
+  return paint?.surface ? { surface: paint.surface } : {};
+}
 
 /**
  * Positions only, as floats. Packed models store them as quantized integers,
@@ -43,7 +50,7 @@ export function stageFromGltf(root: Object3D, look: Vec): Stage {
     // glTF colors are linear and this world works in display space throughout.
     const color = new Color().copy(material?.color ?? new Color(1, 1, 1)).convertLinearToSRGB().getHex();
     const glow = (material?.emissive?.getHex() ?? 0) !== 0;
-    model.add(glow ? { color, glow } : { color }, floatPositions(child.geometry), child.matrixWorld);
+    model.add({ color, ...(glow ? { glow } : {}), ...surfaceOf(material?.name) }, floatPositions(child.geometry), child.matrixWorld);
   });
   return { object: model.build(), look };
 }

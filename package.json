@@ -10,7 +10,7 @@
     "check": "astro check",
     "test": "vitest run",
     "models:dump": "vitest run --config blender/vitest.config.ts",
-    "models:pack": "gltfpack -i blender/out/reformer.glb -o public/models/reformer-reharp.glb -cc -vp 16 -kn -km && gltfpack -i blender/out/carseland.glb -o public/models/carseland.glb -cc -vp 16 -kn -km"
+    "models:pack": "gltfpack -i blender/out/reformer.glb -o public/models/reformer-reharp.glb -cc -vp 16 -kn -km && gltfpack -i blender/out/carseland.glb -o public/models/carseland.glb -cc -vp 16 -kn -km && gltfpack -i blender/out/calen.glb -o public/models/calen.glb -cc -kn -km"
   },
   "dependencies": {
     "astro": "7.4.0",
