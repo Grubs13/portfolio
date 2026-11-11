@@ -12,6 +12,8 @@ export interface Stage {
   look: Vec;
   /** How the character is cast at the anchor: the pose it holds and its turn about y. It stands at the stage's default turn without one. */
   cast?: Cast;
+  /** World units that must fit across the free part of the screen. Smaller frames the scene closer. */
+  frame?: number;
 }
 /** The character faces (sin yaw, 0, cos yaw). */
 export interface Cast {

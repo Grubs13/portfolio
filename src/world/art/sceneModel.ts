@@ -15,6 +15,8 @@ export interface SceneModel {
   look: Vec;
   /** How the character is posed and turned at the anchor, when the scene is built around it. */
   cast?: Cast;
+  /** World units that must fit across the free part of the screen, when the scene wants a closer or wider shot. */
+  frame?: number;
 }
 
 /** Scenes whose stage comes from a GLB in `public/`, keyed by scene id. They replace the code art in `SCENE_ART`. */
@@ -22,7 +24,7 @@ export const SCENE_MODELS: Readonly<Partial<Record<string, SceneModel>>> = {
   'ammonia-operations-engineer': { url: '/models/carseland.glb', look: [-5, 6, -8] },
   'reformer-reharp': { url: '/models/reformer-reharp.glb', look: [-4, 6.5, -10] },
   // Calen kneels at the open flange face in front of him, seen from behind at three-quarters.
-  'reliability-engineer': { url: '/models/reliability.glb', look: [-0.9, 1.4, 0.25], cast: { pose: 'inspect', yaw: -1.3 } },
+  'reliability-engineer': { url: '/models/reliability.glb', look: [-0.9, 1.4, 0.25], cast: { pose: 'inspect', yaw: -1.3 }, frame: 11 },
 };
 
 /** The pixel texture of the palette paint a Blender material is named after, as `paint_<name>`. */
@@ -45,7 +47,7 @@ function floatPositions(geometry: BufferGeometry): BufferGeometry {
 }
 
 /** Merges a loaded glTF scene into one mesh per material, so it shades and costs the same as the code-built stages. */
-export function stageFromGltf(root: Object3D, { look, cast }: Pick<SceneModel, 'look' | 'cast'>): Stage {
+export function stageFromGltf(root: Object3D, { look, cast, frame }: Pick<SceneModel, 'look' | 'cast' | 'frame'>): Stage {
   const model = stageGround(new MergedModel());
   root.updateMatrixWorld(true);
   root.traverse((child) => {
@@ -56,7 +58,7 @@ export function stageFromGltf(root: Object3D, { look, cast }: Pick<SceneModel, '
     const glow = (material?.emissive?.getHex() ?? 0) !== 0;
     model.add({ color, ...(glow ? { glow } : {}), ...surfaceOf(material?.name) }, floatPositions(child.geometry), child.matrixWorld);
   });
-  return { object: model.build(), look, ...(cast ? { cast } : {}) };
+  return { object: model.build(), look, ...(cast ? { cast } : {}), ...(frame ? { frame } : {}) };
 }
 
 /** A loader for scene models, which Blender exports with meshopt compression. */
