@@ -18,7 +18,7 @@ import {
 import type { Scene } from '../content/scenes';
 import type { TimelineState } from '../lib/timeline';
 import { stageFor } from './art';
-import { buildCharacter, type Character } from './art/character';
+import type { Character } from './art/character';
 import { outlineMaterial, shadowUniforms, SUN } from './art/materials';
 import { pointOnSegment, segmentTangent, type Vec3, type WorldLayout } from './layout';
 
@@ -38,14 +38,13 @@ export interface Stage {
 const ISO_DIRECTION = new Vector3(1, 1, 1).normalize();
 const CAMERA_DISTANCE = 100;
 /** World units that must fit across the free part of the screen. */
-const FRAME = 26;
+const FRAME = 22;
 const TRAVEL_ZOOM_OUT = 0.3;
 /** A three-quarter view: turned from the camera, which looks from +x +z, so one side shows. */
 const IDLE_YAW = Math.PI / 4 + 0.5;
-const LEAN = 0.45;
 const SWINGS_PER_TRAVEL = 3;
-/** CSS pixels per art pixel. Phones get finer pixels so the character keeps its detail. */
-const pixelSize = (width: number) => (width < 768 ? 2 : 3);
+/** CSS pixels per art pixel: chunky enough to read as pixel art, fine enough for the character's detail. */
+const PIXEL_SIZE = 2;
 const NEAR = 0.1;
 const FAR = CAMERA_DISTANCE * 5;
 /** Depth steps smaller than this many art pixels are surface slope, not a silhouette. */
@@ -94,9 +93,7 @@ function poseCharacter(c: Character, layout: WorldLayout, state: TimelineState):
     const anchor = layout.anchors[state.scene]!;
     c.root.position.set(anchor.x, anchor.y, anchor.z);
     c.root.rotation.y = IDLE_YAW;
-    c.body.rotation.x = 0;
-    for (const limb of [...c.arms, ...c.legs]) limb.rotation.x = 0;
-    c.flame.visible = false;
+    c.pose(0, 0);
     return anchor;
   }
 
@@ -106,17 +103,10 @@ function poseCharacter(c: Character, layout: WorldLayout, state: TimelineState):
   const tangent = segmentTangent(segment, t);
   // Peaks mid-flight and is zero at both islands, so the pose meets the idle pose at each end.
   const flight = Math.sin(Math.PI * t);
-  const swing = Math.sin(t * 2 * Math.PI * SWINGS_PER_TRAVEL) * flight;
 
   c.root.position.set(p.x, p.y, p.z);
   c.root.rotation.y = shortestAngleLerp(IDLE_YAW, Math.atan2(tangent.x, tangent.z), Math.min(1, 2 * flight));
-  c.body.rotation.x = LEAN * flight;
-  c.arms[0].rotation.x = 0.7 * swing;
-  c.arms[1].rotation.x = -0.7 * swing;
-  c.legs[0].rotation.x = 0.5 * flight + 0.25 * swing;
-  c.legs[1].rotation.x = 0.5 * flight - 0.25 * swing;
-  c.flame.visible = flight > 0.02;
-  c.flame.scale.y = flight;
+  c.pose(flight, t * SWINGS_PER_TRAVEL);
   return p;
 }
 
@@ -136,7 +126,7 @@ function aimSnapped(camera: OrthographicCamera, target: Vector3, direction: Vect
   camera.updateMatrixWorld();
 }
 
-export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[], layout: WorldLayout): Stage {
+export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[], layout: WorldLayout, character: Character): Stage {
   // The world renders at art-pixel resolution into a target, the outline pass
   // writes that same resolution to the canvas, and CSS scales the canvas up
   // with hard pixel edges. Fewer pixels make it cheaper than a full-size render.
@@ -164,7 +154,6 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
   stars.layers.set(SKY_LAYER);
   world.add(stars);
 
-  const character = buildCharacter();
   world.add(character.root);
 
   // Sunlight shadows come from a depth map rendered from the sun, centered on the character.
@@ -194,9 +183,8 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
     ready: Promise.all([renderer.compileAsync(world, camera), renderer.compileAsync(post, camera)]),
 
     resize(width, height, nextFocus) {
-      const px = pixelSize(width);
-      const columns = Math.max(1, Math.round(width / px));
-      rows = Math.max(1, Math.round(height / px));
+      const columns = Math.max(1, Math.round(width / PIXEL_SIZE));
+      rows = Math.max(1, Math.round(height / PIXEL_SIZE));
       renderer.setPixelRatio(1);
       renderer.setSize(columns, rows, false);
       target.setSize(columns, rows);

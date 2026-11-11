@@ -1,7 +1,7 @@
 import { type BufferGeometry, Color, CylinderGeometry, Euler, Float32BufferAttribute, Group, Matrix4, Mesh, Quaternion, Vector3 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { box, type Vec } from './kit';
-import { glowMaterial, litMaterial } from './materials';
+import { glowMaterial, litMaterial, smoothMaterial } from './materials';
 import type { Paint } from './palette';
 
 const UP = new Vector3(0, 1, 0);
@@ -9,15 +9,18 @@ const UP = new Vector3(0, 1, 0);
 /**
  * Collects transformed primitives with their paint baked into vertex colors,
  * so a whole model costs one draw call for lit parts and one for glowing parts.
+ * A `smooth` model keeps vertex normals and shades with them, for rounded characters.
  */
 export class MergedModel {
   private lit: BufferGeometry[] = [];
   private glowing: BufferGeometry[] = [];
   private base = new Matrix4();
 
+  constructor(private readonly smooth = false) {}
+
   /** A view that adds into this same model with every part placed by `transform` first, for laying out a group in its own frame. */
   within(transform: Matrix4): MergedModel {
-    const view = new MergedModel();
+    const view = new MergedModel(this.smooth);
     view.lit = this.lit;
     view.glowing = this.glowing;
     view.base = this.base.clone().multiply(transform);
@@ -25,11 +28,11 @@ export class MergedModel {
   }
 
   add(paint: Paint, geometry: BufferGeometry, matrix: Matrix4): this {
-    // The shader derives facet normals from screen-space derivatives, so only positions and colors are kept.
     const part = (geometry.index ? geometry.toNonIndexed() : geometry.clone()).applyMatrix4(
       new Matrix4().multiplyMatrices(this.base, matrix),
     );
-    part.deleteAttribute('normal');
+    // The faceted shader derives normals from screen-space derivatives, so it needs only positions and colors.
+    if (!this.smooth || paint.glow) part.deleteAttribute('normal');
     part.deleteAttribute('uv');
     const { r, g, b } = new Color(paint.color);
     const colors = new Float32Array(part.getAttribute('position').count * 3);
@@ -90,7 +93,7 @@ export class MergedModel {
 
   build(): Group {
     const g = new Group();
-    for (const [parts, material] of [[this.lit, litMaterial], [this.glowing, glowMaterial]] as const) {
+    for (const [parts, material] of [[this.lit, this.smooth ? smoothMaterial : litMaterial], [this.glowing, glowMaterial]] as const) {
       if (parts.length === 0) continue;
       const merged = mergeGeometries(parts);
       if (!merged) throw new Error('Model parts have mismatched attributes');

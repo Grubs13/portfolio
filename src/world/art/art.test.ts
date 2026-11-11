@@ -3,11 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { type Scene, scenes } from '../../content/scenes';
 import { STAGE_RADIUS, layoutScenes, pointOnSegment } from '../layout';
 import { stageFor, SCENE_ART } from '.';
+import { CHARACTER_SCALE } from './character';
 import { PLACEHOLDERS } from './placeholders';
 
 // Generous bounds of the character in any travel pose, measured from its feet.
-const BODY_HALF_WIDTH = 0.45;
-const BODY_HEIGHT = 2.3;
+const BODY_HALF_WIDTH = 0.45 * CHARACTER_SCALE;
+const BODY_HEIGHT = 2.3 * CHARACTER_SCALE;
 
 function meshes(object: Object3D): Mesh[] {
   object.updateMatrixWorld(true);
