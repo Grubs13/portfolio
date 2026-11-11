@@ -4,18 +4,20 @@
 # waist band, a chest harness carrying a radio and a gas detector, a name tag,
 # navy cargo pants with hi-vis shin bands and tan work boots.
 #
-# The body is one continuous mesh grown from a stick skeleton by Blender's Skin
-# modifier and smoothed, so shoulders, the chest-to-waist taper, elbows, knees and
-# boots blend like the chunky brawlers in the style references. Clothing is painted
-# onto it by region. Head, hands and gear are modelled separately, each riding a
-# joint of the skeleton. No rig: each pose in `POSES` turns joints, the body and
-# parts are built once per pose, and each pose's meshes are exported under an
-# empty named `pose_<name>`, which the site shows one at a time. Built in
-# Blender's axes: z up, facing -y. Run inside Blender with DIR set to this folder:
+# The body is `figure.py`'s skin body, smoothed finely, so shoulders, the
+# chest-to-waist taper, elbows, knees and boots blend like the chunky brawlers in
+# the style references. Clothing is painted onto it by region. Head, hands and gear
+# are modelled separately, each riding a joint of the skeleton. No rig: each pose
+# in `POSES` turns joints, the body and parts are built once per pose, and each
+# pose's meshes are exported under an empty named `pose_<name>`, which the site
+# shows one at a time. Built in Blender's axes: z up, facing -y. Run inside
+# Blender with DIR set to this folder:
 #   exec(open(f'{DIR}/character.py').read(), {'DIR': DIR})
-import io, contextlib, math, os
+import io, contextlib, os
 import bpy, bmesh
-from mathutils import Euler, Matrix, Vector
+from mathutils import Matrix, Vector
+
+exec(open(f'{DIR}/figure.py').read(), globals())
 
 COLORS = {
     'navy': 0x26325a, 'navyDark': 0x1d2747, 'hiVis': 0xd4f03a, 'reflective': 0xc5ccd6, 'skin': 0xe3b48d,
@@ -49,53 +51,7 @@ def mesh_object(name, bm, collection, paints, smooth=True):
     for p in paints: ob.data.materials.append(material(p))
     return ob
 
-def evaluated(ob):
-    """The object's mesh with its modifiers applied, as a bmesh; the object is removed."""
-    dg = bpy.context.evaluated_depsgraph_get()
-    me = bpy.data.meshes.new_from_object(ob.evaluated_get(dg))
-    bm = bmesh.new(); bm.from_mesh(me)
-    data = ob.data
-    bpy.data.objects.remove(ob); bpy.data.meshes.remove(me)
-    if isinstance(data, bpy.types.Mesh) and data.users == 0: bpy.data.meshes.remove(data)
-    return bm
-
-def smoothed(collection, bm, levels):
-    o = bpy.data.objects.new('t', bpy.data.meshes.new('t')); bm.to_mesh(o.data); bm.free()
-    collection.objects.link(o); o.modifiers.new('s', 'SUBSURF').levels = levels
-    return evaluated(o)
-
 # ---- body ----
-
-# Skeleton joints: name -> (position, (radius across, radius front-to-back)).
-JOINTS = {
-    'pelvis': ((0, 0, 0.98), (0.2, 0.14)),
-    'waist': ((0, 0, 1.12), (0.21, 0.15)),
-    'chest': ((0, -0.01, 1.34), (0.26, 0.17)),
-    'upper': ((0, 0, 1.5), (0.27, 0.16)),
-    'neckBase': ((0, 0.01, 1.63), (0.11, 0.1)),
-    'neckTop': ((0, 0.01, 1.7), (0.09, 0.09)),
-}
-for side, s in (('R', -1), ('L', 1)):
-    JOINTS.update({
-        f'shoulder{side}': ((s * 0.29, 0, 1.53), (0.115, 0.11)),
-        f'bicep{side}': ((s * 0.36, 0.0, 1.38), (0.095, 0.095)),
-        f'elbow{side}': ((s * 0.39, 0.02, 1.22), (0.075, 0.075)),
-        f'forearm{side}': ((s * 0.405, 0.0, 1.1), (0.08, 0.075)),
-        f'wrist{side}': ((s * 0.41, -0.02, 0.99), (0.06, 0.055)),
-        f'hip{side}': ((s * 0.12, 0, 0.9), (0.125, 0.125)),
-        f'thigh{side}': ((s * 0.13, 0, 0.72), (0.115, 0.115)),
-        f'knee{side}': ((s * 0.135, -0.01, 0.52), (0.09, 0.095)),
-        f'calf{side}': ((s * 0.135, 0.01, 0.36), (0.095, 0.095)),
-        f'ankle{side}': ((s * 0.135, 0.0, 0.18), (0.1, 0.1)),
-        f'heel{side}': ((s * 0.135, 0.04, 0.08), (0.1, 0.085)),
-        f'toe{side}': ((s * 0.14, -0.15, 0.07), (0.095, 0.075)),
-    })
-BONES = [('pelvis', 'waist'), ('waist', 'chest'), ('chest', 'upper'), ('upper', 'neckBase'), ('neckBase', 'neckTop')]
-for side in 'RL':
-    BONES += [('upper', f'shoulder{side}'), (f'shoulder{side}', f'bicep{side}'), (f'bicep{side}', f'elbow{side}'),
-              (f'elbow{side}', f'forearm{side}'), (f'forearm{side}', f'wrist{side}'),
-              ('pelvis', f'hip{side}'), (f'hip{side}', f'thigh{side}'), (f'thigh{side}', f'knee{side}'),
-              (f'knee{side}', f'calf{side}'), (f'calf{side}', f'ankle{side}'), (f'ankle{side}', f'heel{side}'), (f'heel{side}', f'toe{side}')]
 
 BODY_PAINTS = ['navy', 'hiVis', 'reflective', 'boots', 'sole', 'navyDark', 'bootsDark', 'undershirt']
 
@@ -122,9 +78,7 @@ def body_paint(c):
 
 # ---- poses ----
 
-# A pose turns joints by Euler angles (x, y, z) in radians, about Blender's axes as the
-# parent joint carries them, and a turn at a joint swings everything below it in `BONES`.
-# Facing -y, a positive x turn tips an upright bone forward and swings a hanging one back.
+# Joint turns in `figure.py`'s format; `stand` is the rest pose.
 POSES = {
     'stand': {},
     # Kneeling on his right knee with the toes tucked, leaning in to a flange face: a
@@ -137,44 +91,9 @@ POSES = {
         'shoulderR': (-1.75, 0, 0.2), 'elbowR': (-0.1, 0, 0), 'wristR': (1.2, 0, 0),
     },
 }
-PARENT = {b: a for a, b in BONES}
-
-def pose_matrices(pose):
-    """Each joint's posed rigid transform, by forward kinematics from the pelvis down `BONES`.
-    It carries a point riding that joint from where it sits at rest to where it sits posed."""
-    G = {}
-    for name in ['pelvis', *PARENT]:
-        rest = Vector(JOINTS[name][0])
-        turn = Euler(pose.get(name, (0, 0, 0)), 'XYZ').to_matrix().to_4x4()
-        G[name] = G.get(PARENT.get(name), Matrix.Identity(4)) @ Matrix.Translation(rest) @ turn @ Matrix.Translation(-rest)
-    return G
-
-def rest_point(G, p):
-    """Where a point of the posed body sat at rest, pulled back through the bone nearest to it."""
-    def distance(bone):
-        a, b = (G[bone[0]] @ Vector(JOINTS[j][0]) for j in bone)
-        t = max(0.0, min(1.0, (p - a).dot(b - a) / (b - a).length_squared))
-        return (a.lerp(b, t) - p).length
-    return G[min(BONES, key=distance)[0]].inverted() @ p
-
 def body(collection, G=None):
-    me = bpy.data.meshes.new('skeleton')
-    names = list(JOINTS)
-    joint = (lambda n: JOINTS[n][0]) if G is None else (lambda n: G[n] @ Vector(JOINTS[n][0]))
-    me.from_pydata([joint(n) for n in names], [(names.index(a), names.index(b)) for a, b in BONES], [])
-    ob = bpy.data.objects.new('skeleton', me)
-    collection.objects.link(ob)
-    skin = ob.modifiers.new('skin', 'SKIN')
-    skin.use_smooth_shade = True
-    for i, n in enumerate(names):
-        me.skin_vertices[0].data[i].radius = JOINTS[n][1]
-    me.skin_vertices[0].data[0].use_root = True
     # Fine enough that the painted stripes and bands keep straight edges.
-    ob.modifiers.new('smooth', 'SUBSURF').levels = 3
-    bm = evaluated(ob)
-    # Painted where each face sat at rest, so the bands stay put on the limbs in any pose.
-    rest = (lambda c: c) if G is None else (lambda c: rest_point(G, c))
-    for f in bm.faces: f.material_index = BODY_PAINTS.index(body_paint(rest(f.calc_center_median())))
+    bm = skin_body(collection, G, 3, lambda c: BODY_PAINTS.index(body_paint(c)))
     return mesh_object('calen_body', bm, collection, BODY_PAINTS)
 
 # ---- head ----
@@ -313,8 +232,7 @@ def posed(col, name):
     G = pose_matrices(pose) if pose else None
     riders = [*(('neckTop', ob) for ob in head(col)), *hand(col, 'R'), *hand(col, 'L'), *gear(col)]
     if name == 'inspect': riders += flashlight(col)
-    if G:
-        for joint, ob in riders: ob.data.transform(G[joint])
+    for joint, ob in riders: ob.data.transform(rider(G, joint))
     obs = [body(col, G), *(ob for _, ob in riders)]
     root = bpy.data.objects.new(f'pose_{name}', None)
     col.objects.link(root)
