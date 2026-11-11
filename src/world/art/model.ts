@@ -1,5 +1,5 @@
-import { Box3, Color, Float32BufferAttribute, Group, Mesh, type MeshStandardMaterial } from 'three';
-import { buildCharacter, type Character, CHARACTER_SCALE } from './character';
+import { Box3, Color, Float32BufferAttribute, Group, Mesh, type MeshStandardMaterial, type Object3D } from 'three';
+import { buildCharacter, type Character, CHARACTER_POSES, type CharacterPose, CHARACTER_SCALE } from './character';
 import { smoothMaterial } from './materials';
 import { sceneLoader } from './sceneModel';
 
@@ -35,14 +35,21 @@ function paintVertices(mesh: Mesh) {
   mesh.material = smoothMaterial;
 }
 
-export async function loadCharacter({ url, height, yaw = 0 }: CharacterModel): Promise<Character> {
-  const gltf = await (await sceneLoader()).loadAsync(url);
-  const model = gltf.scene;
+/**
+ * The character from a loaded glTF scene, sized by its standing pose. Each pose is
+ * a `pose_<name>` group, and only the one named last is shown; a pose the model
+ * lacks shows it standing.
+ */
+export function characterFromGltf(model: Object3D, { height, yaw = 0 }: Omit<CharacterModel, 'url'>): Character {
   model.traverse((child) => {
     if (child instanceof Mesh) paintVertices(child);
   });
+  const groups = new Map(CHARACTER_POSES.flatMap((name) => {
+    const group = model.getObjectByName(`pose_${name}`);
+    return group ? [[name, group] as const] : [];
+  }));
 
-  const bounds = new Box3().setFromObject(model);
+  const bounds = new Box3().setFromObject(groups.get('stand') ?? model);
   const scale = height / (bounds.max.y - bounds.min.y);
   model.scale.setScalar(scale);
   model.position.y = -bounds.min.y * scale;
@@ -50,7 +57,17 @@ export async function loadCharacter({ url, height, yaw = 0 }: CharacterModel): P
   const root = new Group();
   root.add(model);
 
-  return { root };
+  const pose = (name: CharacterPose) => {
+    const shown = groups.get(name) ?? groups.get('stand');
+    for (const group of groups.values()) group.visible = group === shown;
+  };
+  pose('stand');
+  return { root, pose };
+}
+
+export async function loadCharacter(model: CharacterModel): Promise<Character> {
+  const gltf = await (await sceneLoader()).loadAsync(model.url);
+  return characterFromGltf(gltf.scene, model);
 }
 
 /** The sculpted character when one is set and loads, otherwise the stand-in. */

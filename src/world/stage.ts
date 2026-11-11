@@ -17,7 +17,7 @@ import type { Scene } from '../content/scenes';
 import type { TimelineState } from '../lib/timeline';
 import { stageFor } from './art';
 import type { Character } from './art/character';
-import type { StageBuilder } from './art/kit';
+import type { Cast, StageBuilder } from './art/kit';
 import { screenMaterial, shadowUniforms, SUN } from './art/materials';
 import type { WorldLayout } from './layout';
 
@@ -37,10 +37,12 @@ export interface Stage {
 
 const ISO_DIRECTION = new Vector3(1, 1, 1).normalize();
 const CAMERA_DISTANCE = 100;
-/** World units that must fit across the free part of the screen. */
+/** World units that must fit across the free part of the screen, for a stage that does not set its own. */
 const FRAME = 22;
 /** A three-quarter view: turned from the camera, which looks from +x +z, so one side shows. */
 const IDLE_YAW = Math.PI / 4 + 0.5;
+/** How the character stands in a scene whose stage does not cast it. */
+const IDLE_CAST: Cast = { pose: 'stand', yaw: IDLE_YAW };
 /** CSS pixels per art pixel: chunky enough to read as pixel art, fine enough for the character's detail. */
 const PIXEL_SIZE = 2;
 const NEAR = 0.1;
@@ -102,15 +104,18 @@ export function createStage(
 
   const world = new ThreeScene();
   const looks: Vector3[] = [];
+  const casts: Cast[] = [];
+  const frames: number[] = [];
   scenes.forEach((scene, i) => {
     const anchor = layout.anchors[i]!;
-    const { object: stageObject, look } = stageFor(scene, loaded)();
+    const { object: stageObject, look, cast = IDLE_CAST, frame = FRAME } = stageFor(scene, loaded)();
     looks.push(new Vector3(...look));
+    casts.push(cast);
+    frames.push(frame);
     stageObject.position.set(anchor.x, anchor.y, anchor.z);
     world.add(stageObject);
   });
   world.add(character.root);
-  character.root.rotation.y = IDLE_YAW;
 
   // Sunlight shadows come from a depth map rendered from the sun, centered on the character.
   const sunCamera = new OrthographicCamera(-SHADOW_REACH, SHADOW_REACH, SHADOW_REACH, -SHADOW_REACH, 1, SHADOW_DEPTH);
@@ -136,12 +141,12 @@ export function createStage(
   let rows = 1;
   let focuses: readonly Focus[] = [];
 
-  /** Sets the camera's view for a subject framed at `focus`, and returns world units per art pixel. */
-  function frame({ x, y }: Focus): number {
+  /** Sets the camera's view for `size` world units framed at `focus`, and returns world units per art pixel. */
+  function frame({ x, y }: Focus, size: number): number {
     // The free part of the screen is the largest band centered on the focus along each axis.
     const freeX = Math.max(0.2, 2 * Math.min(x, 1 - x));
     const freeY = Math.max(0.2, 2 * Math.min(y, 1 - y));
-    const viewHeight = Math.max(FRAME / freeY, FRAME / (aspect * freeX));
+    const viewHeight = Math.max(size / freeY, size / (aspect * freeX));
     const viewWidth = viewHeight * aspect;
     camera.left = -x * viewWidth;
     camera.right = (1 - x) * viewWidth;
@@ -151,11 +156,14 @@ export function createStage(
     return viewHeight / rows;
   }
 
-  /** Renders scene `i` into half `side` of the buffer (0 left, 1 right), the character standing at its anchor, and returns world units per art pixel. */
+  /** Renders scene `i` into half `side` of the buffer (0 left, 1 right), the character cast at its anchor, and returns world units per art pixel. */
   function draw(i: number, side: 0 | 1): number {
-    const unit = frame(focuses[i] ?? { x: 0.5, y: 0.5 });
+    const unit = frame(focuses[i] ?? { x: 0.5, y: 0.5 }, frames[i]!);
     const anchor = layout.anchors[i]!;
+    const cast = casts[i]!;
     character.root.position.set(anchor.x, anchor.y, anchor.z);
+    character.root.rotation.y = cast.yaw;
+    character.pose(cast.pose);
     look.set(anchor.x, anchor.y, anchor.z).add(looks[i]!);
     // Snapped to whole art pixels and whole shadow texels, so the picture is the same every time the scene is shown.
     aimSnapped(camera, look, ISO_DIRECTION, CAMERA_DISTANCE, unit);
@@ -194,17 +202,15 @@ export function createStage(
     },
 
     render(state) {
-      // Mirrored framings share a scale, so one outline threshold suits both scenes in a wipe.
-      let unit: number;
+      // Each half gets its own outline threshold, since the two scenes in a wipe can be framed at different scales.
+      const threshold = (unit: number) => (OUTLINE_PIXELS * unit) / (FAR - NEAR);
       if (state.phase === 'dwell') {
-        unit = draw(state.scene, 0);
+        uniforms.threshold!.value.setScalar(threshold(draw(state.scene, 0)));
         uniforms.progress!.value = 0;
       } else {
-        unit = draw(state.from, 0);
-        draw(state.to, 1);
+        uniforms.threshold!.value.set(threshold(draw(state.from, 0)), threshold(draw(state.to, 1)));
         uniforms.progress!.value = state.t;
       }
-      uniforms.threshold!.value = (OUTLINE_PIXELS * unit) / (FAR - NEAR);
       renderer.setRenderTarget(null);
       renderer.render(post, camera);
     },

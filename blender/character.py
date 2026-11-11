@@ -4,16 +4,20 @@
 # waist band, a chest harness carrying a radio and a gas detector, a name tag,
 # navy cargo pants with hi-vis shin bands and tan work boots.
 #
-# The body is one continuous mesh grown from a stick skeleton by Blender's Skin
-# modifier and smoothed, so shoulders, the chest-to-waist taper, elbows, knees and
-# boots blend like the chunky brawlers in the style references. Clothing is painted
-# onto it by region. Head, hands and gear are modelled separately. No rig: he holds
-# one standing pose. Built in Blender's axes: z up, facing -y. Run inside Blender
-# with DIR set to this folder:
+# The body is `figure.py`'s skin body, smoothed finely, so shoulders, the
+# chest-to-waist taper, elbows, knees and boots blend like the chunky brawlers in
+# the style references. Clothing is painted onto it by region. Head, hands and gear
+# are modelled separately, each riding a joint of the skeleton. No rig: each pose
+# in `POSES` turns joints, the body and parts are built once per pose, and each
+# pose's meshes are exported under an empty named `pose_<name>`, which the site
+# shows one at a time. Built in Blender's axes: z up, facing -y. Run inside
+# Blender with DIR set to this folder:
 #   exec(open(f'{DIR}/character.py').read(), {'DIR': DIR})
-import io, contextlib, math, os
+import io, contextlib, os
 import bpy, bmesh
 from mathutils import Matrix, Vector
+
+exec(open(f'{DIR}/figure.py').read(), globals())
 
 COLORS = {
     'navy': 0x26325a, 'navyDark': 0x1d2747, 'hiVis': 0xd4f03a, 'reflective': 0xc5ccd6, 'skin': 0xe3b48d,
@@ -47,53 +51,7 @@ def mesh_object(name, bm, collection, paints, smooth=True):
     for p in paints: ob.data.materials.append(material(p))
     return ob
 
-def evaluated(ob):
-    """The object's mesh with its modifiers applied, as a bmesh; the object is removed."""
-    dg = bpy.context.evaluated_depsgraph_get()
-    me = bpy.data.meshes.new_from_object(ob.evaluated_get(dg))
-    bm = bmesh.new(); bm.from_mesh(me)
-    data = ob.data
-    bpy.data.objects.remove(ob); bpy.data.meshes.remove(me)
-    if isinstance(data, bpy.types.Mesh) and data.users == 0: bpy.data.meshes.remove(data)
-    return bm
-
-def smoothed(collection, bm, levels):
-    o = bpy.data.objects.new('t', bpy.data.meshes.new('t')); bm.to_mesh(o.data); bm.free()
-    collection.objects.link(o); o.modifiers.new('s', 'SUBSURF').levels = levels
-    return evaluated(o)
-
 # ---- body ----
-
-# Skeleton joints: name -> (position, (radius across, radius front-to-back)).
-JOINTS = {
-    'pelvis': ((0, 0, 0.98), (0.2, 0.14)),
-    'waist': ((0, 0, 1.12), (0.21, 0.15)),
-    'chest': ((0, -0.01, 1.34), (0.26, 0.17)),
-    'upper': ((0, 0, 1.5), (0.27, 0.16)),
-    'neckBase': ((0, 0.01, 1.63), (0.11, 0.1)),
-    'neckTop': ((0, 0.01, 1.7), (0.09, 0.09)),
-}
-for side, s in (('R', -1), ('L', 1)):
-    JOINTS.update({
-        f'shoulder{side}': ((s * 0.29, 0, 1.53), (0.115, 0.11)),
-        f'bicep{side}': ((s * 0.36, 0.0, 1.38), (0.095, 0.095)),
-        f'elbow{side}': ((s * 0.39, 0.02, 1.22), (0.075, 0.075)),
-        f'forearm{side}': ((s * 0.405, 0.0, 1.1), (0.08, 0.075)),
-        f'wrist{side}': ((s * 0.41, -0.02, 0.99), (0.06, 0.055)),
-        f'hip{side}': ((s * 0.12, 0, 0.9), (0.125, 0.125)),
-        f'thigh{side}': ((s * 0.13, 0, 0.72), (0.115, 0.115)),
-        f'knee{side}': ((s * 0.135, -0.01, 0.52), (0.09, 0.095)),
-        f'calf{side}': ((s * 0.135, 0.01, 0.36), (0.095, 0.095)),
-        f'ankle{side}': ((s * 0.135, 0.0, 0.18), (0.1, 0.1)),
-        f'heel{side}': ((s * 0.135, 0.04, 0.08), (0.1, 0.085)),
-        f'toe{side}': ((s * 0.14, -0.15, 0.07), (0.095, 0.075)),
-    })
-BONES = [('pelvis', 'waist'), ('waist', 'chest'), ('chest', 'upper'), ('upper', 'neckBase'), ('neckBase', 'neckTop')]
-for side in 'RL':
-    BONES += [('upper', f'shoulder{side}'), (f'shoulder{side}', f'bicep{side}'), (f'bicep{side}', f'elbow{side}'),
-              (f'elbow{side}', f'forearm{side}'), (f'forearm{side}', f'wrist{side}'),
-              ('pelvis', f'hip{side}'), (f'hip{side}', f'thigh{side}'), (f'thigh{side}', f'knee{side}'),
-              (f'knee{side}', f'calf{side}'), (f'calf{side}', f'ankle{side}'), (f'ankle{side}', f'heel{side}'), (f'heel{side}', f'toe{side}')]
 
 BODY_PAINTS = ['navy', 'hiVis', 'reflective', 'boots', 'sole', 'navyDark', 'bootsDark', 'undershirt']
 
@@ -118,21 +76,24 @@ def body_paint(c):
     if 1.56 < z < 1.64 and ax < 0.045 and y < -0.06: return 'undershirt'
     return 'navy'
 
-def body(collection):
-    me = bpy.data.meshes.new('skeleton')
-    names = list(JOINTS)
-    me.from_pydata([JOINTS[n][0] for n in names], [(names.index(a), names.index(b)) for a, b in BONES], [])
-    ob = bpy.data.objects.new('skeleton', me)
-    collection.objects.link(ob)
-    skin = ob.modifiers.new('skin', 'SKIN')
-    skin.use_smooth_shade = True
-    for i, n in enumerate(names):
-        me.skin_vertices[0].data[i].radius = JOINTS[n][1]
-    me.skin_vertices[0].data[0].use_root = True
+# ---- poses ----
+
+# Joint turns in `figure.py`'s format; `stand` is the rest pose.
+POSES = {
+    'stand': {},
+    # Kneeling on his right knee with the toes tucked, leaning in to a flange face: a
+    # flashlight raised in his left hand, the right hand reaching forward palm out, the head down.
+    'inspect': {
+        'pelvis': (0.6, 0, 0), 'neckTop': (-0.15, 0, 0),
+        'hipR': (-0.55, 0, 0.05), 'kneeR': (1.75, 0, 0), 'ankleR': (-0.2, 0, 0),
+        'hipL': (-2.3, 0, -0.12), 'kneeL': (1.7, 0, 0),
+        'shoulderL': (-1.95, 0, -0.3), 'elbowL': (-0.35, 0, 0), 'wristL': (0.15, 0, 0),
+        'shoulderR': (-1.75, 0, 0.2), 'elbowR': (-0.1, 0, 0), 'wristR': (1.2, 0, 0),
+    },
+}
+def body(collection, G=None):
     # Fine enough that the painted stripes and bands keep straight edges.
-    ob.modifiers.new('smooth', 'SUBSURF').levels = 3
-    bm = evaluated(ob)
-    for f in bm.faces: f.material_index = BODY_PAINTS.index(body_paint(f.calc_center_median()))
+    bm = skin_body(collection, G, 3, lambda c: BODY_PAINTS.index(body_paint(c)))
     return mesh_object('calen_body', bm, collection, BODY_PAINTS)
 
 # ---- head ----
@@ -214,16 +175,28 @@ def hand(collection, side):
         bmesh.ops.create_cone(w, cap_ends=True, segments=14, radius1=0.068, radius2=0.068, depth=0.035)
         bmesh.ops.transform(w, matrix=Matrix.Translation((wx, wy, wz + 0.03)), verts=w.verts)
         made.append(mesh_object('calen_watch', w, collection, ['reflective']))
+    return [(f'wrist{side}', ob) for ob in made]
+
+def flashlight(collection):
+    """A black flashlight gripped in the left fist, its body along the hand and the lens past the fingertips."""
+    wx, wy, wz = JOINTS['wristL'][0]
+    made = []
+    for name, paint, r1, r2, z0, z1 in (('flashlight', 'black', 0.034, 0.034, 0.64, 0.98), ('bezel', 'black', 0.052, 0.036, 0.58, 0.64),
+                                        ('flashlightLens', 'lamp', 0.042, 0.042, 0.574, 0.582)):
+        b = bmesh.new()
+        bmesh.ops.create_cone(b, cap_ends=True, segments=12, radius1=r1, radius2=r2, depth=z1 - z0)
+        bmesh.ops.transform(b, matrix=Matrix.Translation((wx + 0.005, wy - 0.03, (z0 + z1) / 2)), verts=b.verts)
+        made.append(('wristL', mesh_object(name, b, collection, [paint])))
     return made
 
 def gear(collection):
     """Chest harness with radio and gas detector, name tag, crest, and the hip radio."""
     made = []
-    def box(name, paint, c, size, sub=0):
+    def box(name, paint, c, size, sub=0, joint='chest'):
         b = bmesh.new(); bmesh.ops.create_cube(b, size=1)
         bmesh.ops.transform(b, matrix=Matrix.Translation(c) @ Matrix.Diagonal((*size, 1)), verts=b.verts)
         if sub: b = smoothed(collection, b, sub)
-        made.append(mesh_object(name, b, collection, [paint], smooth=bool(sub)))
+        made.append((joint, mesh_object(name, b, collection, [paint], smooth=bool(sub))))
     for s in (-1, 1):
         # Straps down the front, over the shoulder and down the back.
         box('strap', 'black', (s * 0.2, -0.175, 1.33), (0.055, 0.03, 0.42))
@@ -237,17 +210,34 @@ def gear(collection):
     box('led', 'detectorLed', (0.21, -0.248, 1.355), (0.04, 0.01, 0.018))
     box('nameTag', 'tube', (-0.11, -0.185, 1.43), (0.1, 0.01, 0.045))
     box('crest', 'pipeBlue', (0.1, -0.18, 1.44), (0.07, 0.01, 0.05))
-    box('hipRadio', 'black', (-0.27, -0.06, 1.01), (0.06, 0.09, 0.16), 1)
-    box('hipRadioFace', 'pipeBlue', (-0.302, -0.06, 1.01), (0.01, 0.07, 0.1))
+    box('hipRadio', 'black', (-0.27, -0.06, 1.01), (0.06, 0.09, 0.16), 1, 'pelvis')
+    box('hipRadioFace', 'pipeBlue', (-0.302, -0.06, 1.01), (0.01, 0.07, 0.1), 0, 'pelvis')
     for z in (1.5, 1.45): box('button', 'hair', (0, -0.172, z), (0.025, 0.01, 0.025))
     # Work boots over the feet: a rounded toe cap, the shaft, a darker welt and sole, laces.
-    for s in (-1, 1):
+    for s, side in ((-1, 'R'), (1, 'L')):
         x = s * 0.14
-        box('boot', 'boots', (x, -0.05, 0.1), (0.22, 0.36, 0.17), 2)
-        box('boot', 'boots', (x, 0.01, 0.2), (0.21, 0.22, 0.17), 2)
-        box('sole', 'sole', (x, -0.05, 0.03), (0.225, 0.365, 0.05), 1)
-        box('laces', 'bootsDark', (x, -0.11, 0.2), (0.07, 0.09, 0.01))
+        box('boot', 'boots', (x, -0.05, 0.1), (0.22, 0.36, 0.17), 2, f'ankle{side}')
+        box('boot', 'boots', (x, 0.01, 0.2), (0.21, 0.22, 0.17), 2, f'ankle{side}')
+        box('sole', 'sole', (x, -0.05, 0.03), (0.225, 0.365, 0.05), 1, f'ankle{side}')
+        box('laces', 'bootsDark', (x, -0.11, 0.2), (0.07, 0.09, 0.01), 0, f'ankle{side}')
     return made
+
+def lowest(obs):
+    return min((ob.matrix_world @ v.co).z for ob in obs for v in ob.data.vertices)
+
+def posed(col, name):
+    """Calen in pose `name`, under an empty `pose_<name>`. Each part is built at rest and carried
+    by its joint's posed transform, and the pose is set on the ground where the standing pose stands."""
+    pose = POSES[name]
+    G = pose_matrices(pose) if pose else None
+    riders = [*(('neckTop', ob) for ob in head(col)), *hand(col, 'R'), *hand(col, 'L'), *gear(col)]
+    if name == 'inspect': riders += flashlight(col)
+    for joint, ob in riders: ob.data.transform(rider(G, joint))
+    obs = [body(col, G), *(ob for _, ob in riders)]
+    root = bpy.data.objects.new(f'pose_{name}', None)
+    col.objects.link(root)
+    for ob in obs: ob.parent = root
+    return root, obs
 
 def run(DIR):
     for ob in list(bpy.data.objects): bpy.data.objects.remove(ob)
@@ -255,7 +245,14 @@ def run(DIR):
         for x in list(coll): coll.remove(x)
     for c in list(bpy.data.collections): bpy.data.collections.remove(c)
     col = bpy.data.collections.new('calen'); bpy.context.scene.collection.children.link(col)
-    obs = [body(col), *head(col), *hand(col, 'R'), *hand(col, 'L'), *gear(col)]
+    obs = []
+    ground = None
+    for name in POSES:
+        _, made = posed(col, name)
+        low = lowest(made)
+        if ground is None: ground = low
+        for ob in made: ob.data.transform(Matrix.Translation((0, 0, ground - low)))
+        obs += made
     os.makedirs(f'{DIR}/out', exist_ok=True)
     path = f'{DIR}/out/calen.glb'
     bpy.ops.object.select_all(action='DESELECT')

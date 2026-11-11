@@ -146,6 +146,10 @@ export const palette = {
   lens: paint(0x9db9dc),
   undershirt: paint(0xcdbb9c),
   boots: paint(0xa97c4e),
+  // Site workers' coveralls and work gloves.
+  khaki: paint(0xb89e6e),
+  frRed: paint(0xb8432f),
+  glove: paint(0xd9b45a),
   lamp: glow(0xfff2c2),
   detectorLed: glow(0x5cff7a),
   flame: glow(0xffa040),

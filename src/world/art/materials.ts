@@ -190,7 +190,8 @@ export const glowMaterial = new ShaderMaterial({
 /**
  * Draws the frame to the screen from one buffer that holds scene A in its left
  * half and scene B in its right. Each scene is inked first: a pixel becomes
- * outline when a neighbor lies farther away by more than `threshold` in depth.
+ * outline when a neighbor lies farther away by more than its half's `threshold`
+ * in depth (x for scene A, y for scene B, since the two can be framed at different scales).
  * While `progress` is above zero, scene B wipes in over scene A behind a
  * slanted edge that breaks up into chunky dither, rising with the scroll.
  * `extent` is the part of each half a scene fills, since the buffer is
@@ -203,7 +204,7 @@ export const screenMaterial = new ShaderMaterial({
     tDepth: { value: null },
     texel: { value: new Vector2() },
     extent: { value: new Vector2(0.5, 1) },
-    threshold: { value: 0 },
+    threshold: { value: new Vector2() },
     progress: { value: 0 },
   },
   vertexShader: /* glsl */ `
@@ -218,7 +219,7 @@ uniform sampler2D tColor;
 uniform sampler2D tDepth;
 uniform vec2 texel;
 uniform vec2 extent;
-uniform float threshold;
+uniform vec2 threshold;
 uniform float progress;
 varying vec2 vUv;
 const vec3 INK = vec3(0.07, 0.06, 0.16);
@@ -238,7 +239,7 @@ vec4 inked(float side, vec2 screen) {
     max(depthAt(uv + vec2(texel.x, 0.), lo, hi), depthAt(uv - vec2(texel.x, 0.), lo, hi)),
     max(depthAt(uv + vec2(0., texel.y), lo, hi), depthAt(uv - vec2(0., texel.y), lo, hi))
   );
-  if (d < 1. && far - d > threshold) c.rgb = mix(c.rgb, INK, 0.78);
+  if (d < 1. && far - d > (side < 0.5 ? threshold.x : threshold.y)) c.rgb = mix(c.rgb, INK, 0.78);
   return c;
 }
 const float BAYER[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);

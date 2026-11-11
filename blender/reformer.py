@@ -127,13 +127,6 @@ def layout(K):
         for k in range(4): K.rod('galvanized', (x - 1.1, 0.12 + k * 0.1, z - 0.3 + k * 0.05), (x + 1.1, 0.12 + k * 0.1, z - 0.3 + k * 0.05), 0.05, 6)
         K.foot(x - 1.1, z - 0.4, x + 1.1, z + 0.4, 0.5)
 
-def light_tower(K, x, z):
-    K.box('safetyYellow', (x, 0.6, z), (1.6, 0.9, 1.0), 0, 0.06)
-    K.rod('steelDark', (x, 1.0, z), (x, 6.5, z), 0.08, 6)
-    K.box('steelDark', (x, 6.5, z), (1.6, 0.12, 0.2))
-    for dx in (-0.55, 0.0, 0.55): K.box('lamp', (x + dx, 6.7, z + 0.12), (0.4, 0.3, 0.1), 0, 0, True)
-    K.foot(x - 0.8, z - 0.5, x + 0.8, z + 0.5, 6.8)
-
 def dress(P, site, rnd):
     stats = {'people': 0, 'clutter': 0}
     for (x, z, n, spread) in ((-1, 14.5, 8, 3), (6, 18, 7, 3), (14, 11, 6, 3), (-8, 20, 6, 3), (12, 26, 8, 4),

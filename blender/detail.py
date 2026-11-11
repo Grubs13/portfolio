@@ -56,52 +56,155 @@ def cyl(P, paint, M, r, h, seg=10, rb=None, glow=False):
     v, f = prim_cyl(r, r if rb is None else rb, h, seg)
     P.add(paint, glow, v, f, M)
 
-def hardhat(P, M, paint='hardHat'):
-    # A dome with a brim.
-    v, f = prim_sphere(0.19, 10, 4, 0, 2 * math.pi, 0, math.pi / 2)
-    P.add(paint, False, v, f, M)
-    cyl(P, paint, M @ T(0, 0.01, 0.03), 0.23, 0.03, 10)
-
 # ---- people ----
 
+# Worker poses as joint turns in figure.py's format, which `crew` and `dress_decks` pick from.
+# `climb` has a foot up on a rung and the hands up the rails, for a figure placed on a ladder.
+WORKER_POSES = {
+    'stand': {'shoulderR': (0, -0.06, 0), 'shoulderL': (0, 0.06, 0)},
+    'walk': {'hipR': (-0.45, 0, 0), 'kneeR': (0.25, 0, 0), 'hipL': (0.35, 0, 0), 'kneeL': (0.45, 0, 0), 'ankleL': (-0.25, 0, 0),
+             'shoulderR': (0.4, 0, 0), 'elbowR': (-0.2, 0, 0), 'shoulderL': (-0.4, 0, 0), 'elbowL': (-0.4, 0, 0)},
+    'carry': {'shoulderR': (-0.75, 0, 0.12), 'elbowR': (-0.85, 0, 0), 'shoulderL': (-0.75, 0, -0.12), 'elbowL': (-0.85, 0, 0),
+              'neckTop': (-0.1, 0, 0)},
+    'point': {'shoulderL': (-1.75, 0, 0.25), 'elbowL': (-0.1, 0, 0), 'shoulderR': (0.05, 0, 0), 'elbowR': (-0.3, 0, 0), 'neckTop': (0, 0, 0.25)},
+    'crouch': {'pelvis': (0.4, 0, 0), 'hipR': (-2.3, 0, 0.1), 'kneeR': (2.2, 0, 0), 'ankleR': (-0.3, 0, 0),
+               'hipL': (-2.3, 0, -0.1), 'kneeL': (2.2, 0, 0), 'ankleL': (-0.3, 0, 0), 'neckTop': (-0.35, 0, 0),
+               'shoulderR': (-1.0, 0, 0), 'elbowR': (-0.6, 0, 0), 'shoulderL': (-1.0, 0, 0), 'elbowL': (-0.6, 0, 0)},
+    'kneel': {'pelvis': (0.15, 0, 0), 'hipR': (-0.1, 0, 0.05), 'kneeR': (1.75, 0, 0), 'ankleR': (-0.2, 0, 0),
+              'hipL': (-1.85, 0, -0.1), 'kneeL': (1.7, 0, 0), 'neckTop': (0.15, 0, 0),
+              'shoulderL': (-0.75, 0, 0), 'elbowL': (-0.5, 0, 0), 'shoulderR': (-0.35, 0, 0), 'elbowR': (-0.5, 0, 0)},
+    'climb': {'hipL': (-1.3, 0, 0), 'kneeL': (1.5, 0, 0), 'ankleL': (-0.2, 0, 0),
+              'shoulderR': (-2.9, 0, 0), 'elbowR': (-0.2, 0, 0), 'shoulderL': (-2.3, 0, 0), 'elbowL': (-0.5, 0, 0)},
+}
 POSES = ('stand', 'walk', 'carry', 'point', 'crouch')
 
 # Scenes at plant scale shrink people and their clutter so they sit right beside the equipment.
 SET_SCALE = 1.0
+# A worker's height to the top of the hard hat, standing, at SET_SCALE 1.
+WORKER_HEIGHT = 1.95
+HEAD = Vector((0, 0, 1.86))
+
+def worker_region(c):
+    """Which part of the outfit covers a point of the body at rest."""
+    x, y, z = c
+    ax = abs(x)
+    if z < 0.25: return 'boot'
+    if ax < 0.3 and z < 0.95: return 'legBand' if 0.3 < z < 0.4 else 'coverall'
+    if ax >= 0.3: return 'armBand' if 1.03 < z < 1.1 else 'coverall'
+    if z > 1.64: return 'skin'
+    if 1.14 < z < 1.24: return 'vestBand'
+    if 0.98 < z < 1.6: return 'vest'
+    return 'coverall'
+
+def worker_parts(collection):
+    """Head, hard hat, glasses and mitten hands at rest, as (region, joint, bmesh)."""
+    parts = []
+    def part(region, joint, maker, M, sub=0):
+        b = bmesh.new(); maker(b); bmesh.ops.transform(b, matrix=M, verts=b.verts)
+        parts.append((region, joint, smoothed(collection, b, sub) if sub else b))
+    cube = lambda b: bmesh.ops.create_cube(b, size=1)
+    at = lambda c, size: Matrix.Translation(c) @ Matrix.Diagonal((*size, 1))
+    # The head: hair at the back and sides under the hat, the face in front.
+    hair = lambda c: c.y > HEAD.y + 0.03 and c.z > HEAD.z - 0.08
+    for region, keep in (('skin', lambda c: not hair(c)), ('hair', hair)):
+        b = bmesh.new()
+        bmesh.ops.create_uvsphere(b, u_segments=10, v_segments=7, radius=1)
+        bmesh.ops.transform(b, matrix=at(HEAD, (0.17, 0.18, 0.2)), verts=b.verts)
+        bmesh.ops.delete(b, geom=[f for f in b.faces if not keep(f.calc_center_median())], context='FACES')
+        parts.append((region, 'neckTop', b))
+    part('skin', 'neckTop', cube, at(HEAD + Vector((0, -0.18, -0.02)), (0.045, 0.05, 0.065)))
+    # A domed hard hat with a brim.
+    dome = bmesh.new()
+    bmesh.ops.create_uvsphere(dome, u_segments=12, v_segments=6, radius=1)
+    bmesh.ops.delete(dome, geom=[v for v in dome.verts if v.co.z < -1e-4], context='VERTS')
+    bmesh.ops.transform(dome, matrix=at(HEAD + Vector((0, 0, 0.07)), (0.2, 0.215, 0.17)), verts=dome.verts)
+    parts.append(('hat', 'neckTop', dome))
+    part('hat', 'neckTop', lambda b: bmesh.ops.create_cone(b, cap_ends=True, segments=12, radius1=1, radius2=1, depth=1),
+         at(HEAD + Vector((0, -0.03, 0.075)), (0.245, 0.27, 0.03)))
+    for s in (-1, 1): part('glasses', 'neckTop', cube, at(HEAD + Vector((s * 0.068, -0.168, 0.03)), (0.085, 0.025, 0.05)))
+    for side in 'RL':
+        wx, wy, wz = JOINTS[f'wrist{side}'][0]
+        part('hand', f'wrist{side}', cube, at(Vector((wx, wy - 0.01, wz - 0.06)), (0.14, 0.17, 0.21)), 1)
+    return parts
+
+def to_three(bm, M):
+    """The bmesh's vertices carried by M into three.js axes, and its faces."""
+    k = Matrix(((1, 0, 0, 0), (0, 0, 1, 0), (0, -1, 0, 0), (0, 0, 0, 1))) @ M
+    return [tuple(k @ v.co) for v in bm.verts], [tuple(v.index for v in f.verts) for f in bm.faces]
+
+FIGURES = {}
+
+def figure(pose):
+    """A worker in `pose`, built once: {region: (verts, faces)} in three.js axes, standing on y = 0
+    and facing +z, and where a carried load sits between the hands."""
+    if pose in FIGURES: return FIGURES[pose]
+    if pose != 'stand' and 'stand' not in FIGURES: figure('stand')
+    collection = bpy.context.scene.collection
+    G = pose_matrices(WORKER_POSES[pose])
+    regions = ['boot', 'legBand', 'coverall', 'armBand', 'skin', 'vestBand', 'vest']
+    body = skin_body(collection, G, 1, lambda c: regions.index(worker_region(c)))
+    pieces = split_by_material(body, regions)
+    for region, joint, bm in worker_parts(collection):
+        bm.transform(rider(G, joint))
+        pieces.append((region, bm))
+    low = min(v.co.z for _, bm in pieces for v in bm.verts)
+    top = max(v.co.z for _, bm in pieces for v in bm.verts)
+    scale = WORKER_HEIGHT / (top - low) if pose == 'stand' else FIGURES['stand'][2]
+    M = Matrix.Diagonal((scale,) * 3 + (1,)) @ Matrix.Translation((0, 0, -low))
+    out = {}
+    for region, bm in pieces:
+        v, f = to_three(bm, M)
+        ov, of = out.setdefault(region, ([], []))
+        of += [tuple(i + len(ov) for i in face) for face in f]
+        ov += v
+        bm.free()
+    hands = [M @ (G[f'wrist{s}'] @ Vector(JOINTS[f'wrist{s}'][0])) for s in 'RL']
+    load = (hands[0] + hands[1]) / 2
+    FIGURES[pose] = (out, (load.x, load.z - 0.08 * scale, -load.y + 0.06 * scale), scale)
+    return FIGURES[pose]
+
+def split_by_material(bm, regions):
+    """One bmesh per material index, named by `regions`."""
+    me = bpy.data.meshes.new('t'); bm.to_mesh(me); bm.free()
+    out = []
+    for i, region in enumerate(regions):
+        b = bmesh.new(); b.from_mesh(me)
+        bmesh.ops.delete(b, geom=[f for f in b.faces if f.material_index != i], context='FACES')
+        if b.faces: out.append((region, b))
+        else: b.free()
+    bpy.data.meshes.remove(me)
+    return out
+
+COVERALLS = (('navy', True), ('navy', True), ('navy', False), ('khaki', False), ('frRed', True))
+
+def standing(x, y, z, salt):
+    """A random stream fixed by where a worker stands, so dressing and posing workers leaves the
+    scene's own stream, and everything placed after them, as it was."""
+    return random.Random(hash((round(x, 3), round(y, 3), round(z, 3), salt)))
+
+def outfit(vest, look):
+    """Which paint each region of a worker wears, or None to leave it off."""
+    coverall, bands = look.choice(COVERALLS)
+    band = 'reflective' if bands else coverall
+    return {'coverall': coverall, 'legBand': band, 'armBand': band, 'vest': vest or coverall,
+            'vestBand': 'reflective' if vest else band, 'boot': 'boots', 'skin': 'skin', 'hair': 'hair',
+            'glasses': 'black' if look.random() < 0.4 else None, 'hand': look.choice(['skin', 'glove', 'glove', 'black'])}
 
 def person(P, x, y, z, yaw, vest='hiVis', pose='stand', rnd=random):
-    """A site worker about 1.85 tall at SET_SCALE 1: boots, coveralls, vest with reflective band, arms, head and hard hat."""
+    """A site worker about 1.95 tall to the hat at SET_SCALE 1, in coveralls, a vest with a reflective
+    band (none when `vest` is None), boots, a hard hat and sometimes glasses and gloves."""
     M = T(x, y, z, yaw, (SET_SCALE,) * 3)
-    crouch = pose == 'crouch'
-    hip = 0.55 if crouch else 0.85
-    stride = 0.16 if pose == 'walk' else 0.0
-    for s in (-1, 1):
-        if crouch:
-            box(P, 'navy', M @ T(s * 0.1, 0.18, 0.14) @ Matrix.Rotation(0.9, 4, 'X'), 0.14, 0.5, 0.15)
-            box(P, 'boots', M @ T(s * 0.1, 0.06, 0.28), 0.15, 0.12, 0.26)
-        else:
-            box(P, 'navy', M @ T(s * 0.1, hip / 2 + 0.06, s * stride), 0.15, hip - 0.06, 0.16)
-            box(P, 'boots', M @ T(s * 0.1, 0.06, s * stride + 0.03), 0.16, 0.12, 0.25)
-    box(P, 'navy', M @ T(0, hip + 0.06, 0), 0.34, 0.16, 0.2)
-    box(P, vest, M @ T(0, hip + 0.38, 0), 0.4, 0.5, 0.26, 0.04)
-    box(P, 'reflective', M @ T(0, hip + 0.3, 0), 0.41, 0.05, 0.27)
-    box(P, 'navy', M @ T(0, hip + 0.66, 0), 0.38, 0.08, 0.22)
-    # Arms: down at the sides, both forward to carry, or one raised to point.
-    for s in (-1, 1):
-        if pose == 'carry':
-            box(P, 'navy', M @ T(s * 0.25, hip + 0.42, 0.16) @ Matrix.Rotation(-1.2, 4, 'X'), 0.12, 0.45, 0.12)
-        elif pose == 'point' and s == 1:
-            box(P, 'navy', M @ T(0.3, hip + 0.62, 0.18) @ Matrix.Rotation(-1.4, 4, 'X') @ Matrix.Rotation(-0.3, 4, 'Z'), 0.11, 0.5, 0.11)
-        else:
-            swing = (0.35 * s if pose == 'walk' else 0.06 * s)
-            box(P, 'navy', M @ T(s * 0.26, hip + 0.38, 0) @ Matrix.Rotation(swing, 4, 'X') @ Matrix.Rotation(-0.08 * s, 4, 'Z'), 0.12, 0.5, 0.13)
-            box(P, 'skin', M @ T(s * 0.28, hip + 0.1, 0.0 + swing * 0.2), 0.1, 0.1, 0.1)
+    regions, load, _ = figure(pose)
+    paints = outfit(vest, standing(x, y, z, 0))
     if pose == 'carry':
-        box(P, rnd.choice(['plank', 'timber', 'casing', 'pipeBlue']), M @ T(0, hip + 0.3, 0.42), 0.5, 0.3, 0.4, 0.04)
-    box(P, 'skin', M @ T(0, hip + 0.84, 0.0), 0.24, 0.26, 0.24, 0.03)
-    box(P, 'hair', M @ T(0, hip + 0.8, -0.1), 0.25, 0.2, 0.06)
-    box(P, 'black', M @ T(0, hip + 0.88, 0.12), 0.2, 0.05, 0.02)
-    hardhat(P, M @ T(0, hip + 0.97, 0), rnd.choice(['hardHat', 'hardHat', 'hardHat', 'safetyYellow', 'tankOrange', 'pipeBlue']))
+        box(P, rnd.choice(['plank', 'timber', 'casing', 'pipeBlue']), M @ T(*load), 0.6, 0.3, 0.4, 0.04)
+    paints['hat'] = rnd.choice(['hardHat', 'hardHat', 'hardHat', 'safetyYellow', 'tankOrange', 'pipeBlue'])
+    for region, (v, f) in regions.items():
+        if paints[region]: P.add(paints[region], False, v, f, M)
+
+def varied(vest, pose, look):
+    """Some of a crew work without a vest, and some kneel instead of crouching."""
+    return (None if look.random() < 0.25 else vest), ('kneel' if pose == 'crouch' and look.random() < 0.5 else pose)
 
 def crew(P, site, cx, cz, n, spread, rnd, vests=('hiVis', 'hiVis', 'tankOrange'), face=None):
     placed = 0
@@ -110,7 +213,7 @@ def crew(P, site, cx, cz, n, spread, rnd, vests=('hiVis', 'hiVis', 'tankOrange')
         x, z = cx + rnd.uniform(-spread, spread), cz + rnd.uniform(-spread, spread)
         if not site.claim(x, z, 0.35 * SET_SCALE, 2.0 * SET_SCALE): continue
         yaw = face if face is not None else rnd.uniform(-math.pi, math.pi)
-        person(P, x, 0, z, yaw + rnd.uniform(-0.6, 0.6), rnd.choice(vests), rnd.choice(POSES), rnd)
+        person(P, x, 0, z, yaw + rnd.uniform(-0.6, 0.6), *varied(rnd.choice(vests), rnd.choice(POSES), standing(x, 0, z, 1)), rnd)
         placed += 1
     return placed
 
@@ -331,6 +434,7 @@ def dress_decks(P, site, rnd, n=30):
     for lo, hi in decks[: n * 2]:
         if placed >= n: break
         x, z = rnd.uniform(lo.x + 0.3, hi.x - 0.3), rnd.uniform(lo.z + 0.3, hi.z - 0.3)
-        person(P, x, hi.y, z, rnd.uniform(-3.1, 3.1), rnd.choice(['hiVis', 'tankOrange']), rnd.choice(['stand', 'point', 'crouch']), rnd)
+        yaw, vest, pose = rnd.uniform(-3.1, 3.1), rnd.choice(['hiVis', 'tankOrange']), rnd.choice(['stand', 'point', 'crouch'])
+        person(P, x, hi.y, z, yaw, *varied(vest, pose, standing(x, hi.y, z, 1)), rnd)
         placed += 1
     return placed
