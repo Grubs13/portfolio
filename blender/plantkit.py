@@ -510,7 +510,7 @@ def steam_plume(kit, c, puffs, size):
             jx, jz = kit.rnd.uniform(-0.3, 0.3) * s, kit.rnd.uniform(-0.3, 0.3) * s
             kit.ball('steam', (x - i * 0.45 * size + jx, y + i * size * 0.6, z - i * 0.25 * size + jz), s * (0.8 if k else 1), 1, (1, 0.75, 1))
 
-def kellogg_reformer(K, ox, oz, yaw, s, opening=None, empty_slot=False):
+def kellogg_reformer(K, ox, oz, yaw, s, opening=None, empty_slot=False, secondary=True):
     """A Kellogg top-fired primary reformer at `s` units per metre, after the Carseland photos:
     a rust-panelled radiant box on concrete piers with a stiffener grid, two walkway levels and tunnel
     burners along the foot of the end wall; a corrugated gable penthouse with a red lifting frame and
@@ -518,7 +518,8 @@ def kellogg_reformer(K, ox, oz, yaw, s, opening=None, empty_slot=False):
     ladder; the stack with its platform ring; the F.D. fan house; and the red steel structure beside it.
     The frame's u runs along the box, v toward the front wall. `opening` (u0, u1) leaves the penthouse
     roof off over the harps being changed, and `empty_slot` leaves the top module of the second column out,
-    for a crane to set. Returns points other parts attach to."""
+    for a crane to set. `secondary` adds the red structure with the secondary reformer. Returns points other
+    parts attach to."""
     c, sn = math.cos(yaw), math.sin(yaw)
     def W(u, y, v):
         return (ox + u * s * c + v * s * sn, y * s, oz - u * s * sn + v * s * c)
@@ -542,6 +543,8 @@ def kellogg_reformer(K, ox, oz, yaw, s, opening=None, empty_slot=False):
         for y in (6.5, 10.0, 13.5): slab('rustDark', (0, y - 0.18, face_v), (L, y + 0.18, face_v + out * 0.35))
         for y in (6.5, 11.5):
             slab('galvanized', (-1.2, y - 0.15, face_v + out * 0.35), (L + 1.2, y, face_v + out * 1.6))
+            ends = [Vector(W(-1.2, y, face_v + out * 0.35)), Vector(W(L + 1.2, y, face_v + out * 1.6))]
+            K.site.decks.append((Vector((min(e.x for e in ends), ends[0].y - 0.05, min(e.z for e in ends))), Vector((max(e.x for e in ends), ends[0].y, max(e.z for e in ends)))))
             rail((-1.2, y, face_v + out * 1.6), (L + 1.2, y, face_v + out * 1.6))
     for u_face, out in ((0, -1), (L, 1)):
         for v in range(0, int(D) + 1, 3): slab('rustDark', (u_face, H0, v - 0.18), (u_face + out * 0.35, H1, v + 0.18))
@@ -594,8 +597,10 @@ def kellogg_reformer(K, ox, oz, yaw, s, opening=None, empty_slot=False):
                 continue
             slab('casing', (mu0, y0, CD0 + 0.3), (mu0 + 6.1, y0 + 3.9, CD1 - 0.3), 0.06)
             # Bolted access panels and the rusty bottom rail each module sits on.
-            for k in range(1, 3): slab('casingShade', (mu0 + k * 2.03 - 0.08, y0, CD1 - 0.3), (mu0 + k * 2.03 + 0.08, y0 + 3.9, CD1 - 0.2))
-            slab('rustDark', (mu0, y0, CD0 + 0.3), (mu0 + 6.1, y0 + 0.4, CD1 - 0.2))
+            for k in range(1, 3):
+                slab('casingShade', (mu0 + k * 2.03 - 0.08, y0, CD1 - 0.3), (mu0 + k * 2.03 + 0.08, y0 + 3.9, CD1 - 0.2))
+                slab('casingShade', (mu0 + k * 2.03 - 0.08, y0, CD0 + 0.2), (mu0 + k * 2.03 + 0.08, y0 + 3.9, CD0 + 0.3))
+            slab('rustDark', (mu0, y0, CD0 + 0.2), (mu0 + 6.1, y0 + 0.4, CD1 - 0.2))
             modules.append(W(mu0 + 3.05, y0 + 3.9, (CD0 + CD1) / 2))
     slab('radiantRust', (L - 1, 19.0, CD0 + 2), (C0 + 8, 23.0, CD1 - 2))
     slab('rustDark', (L - 1, 23.0, CD0 + 2), (C0 + 8, 23.4, CD1 - 2))
@@ -610,23 +615,26 @@ def kellogg_reformer(K, ox, oz, yaw, s, opening=None, empty_slot=False):
     slab('radiantRust', (C1, 3.5, D / 2 - 2.5), (C1 + 3.5, 9, D / 2 + 2.5))
     slab('corrugated', (C1 - 1, 0, D + 1), (C1 + 7, 5.5, D + 7), 0.05)
     slab('casingShade', (C1 + 1, 0, D + 7), (C1 + 3, 3.2, D + 7.1))
-    # The red steel structure beside the burner end: secondary reformer in a braced frame, the transfer line across.
-    R0, R1 = -16.0, -5.0
-    for u in (R0, R1):
-        for v in (2, 12): rod('redSteel', (u, 0, v), (u, 36, v), 0.35, 6)
-    for y in range(6, 37, 6):
-        for v in (2, 12): rod('redSteel', (R0, y, v), (R1, y, v), 0.3, 6)
-        for u in (R0, R1): rod('redSteel', (u, y, 2), (u, y, 12), 0.3, 6)
-        slab('galvanized', (R0, y - 0.15, 2), (R1, y, 12))
-        if y > 6:
-            rod('redSteel', (R0, y - 6, 2), (R1, y, 2), 0.2, 4)
-            rod('redSteel', (R0, y - 6, 12), (R1, y, 12), 0.2, 4)
-    x, y, z = W((R0 + R1) / 2, 0, 7)
-    K.vessel(x, z, 2.2 * s, 18 * s, paint='stackTan', ladder=False, bands=True, nozzles=2)
-    rod('stainless', (R1, 21, 7), (0, 21, 7), 0.6, 12)
-    rod('stainless', (0, 21, 7), (2, 17, 7), 0.6, 12)
+    if secondary:
+        # The red steel structure beside the burner end: secondary reformer in a braced frame, the transfer line across.
+        R0, R1 = -16.0, -5.0
+        for u in (R0, R1):
+            for v in (2, 12): rod('redSteel', (u, 0, v), (u, 36, v), 0.35, 6)
+        for y in range(6, 37, 6):
+            for v in (2, 12): rod('redSteel', (R0, y, v), (R1, y, v), 0.3, 6)
+            for u in (R0, R1): rod('redSteel', (u, y, 2), (u, y, 12), 0.3, 6)
+            slab('galvanized', (R0, y - 0.15, 2), (R1, y, 12))
+            if y > 6:
+                rod('redSteel', (R0, y - 6, 2), (R1, y, 2), 0.2, 4)
+                rod('redSteel', (R0, y - 6, 12), (R1, y, 12), 0.2, 4)
+        x, y, z = W((R0 + R1) / 2, 0, 7)
+        K.vessel(x, z, 2.2 * s, 18 * s, paint='stackTan', ladder=False, bands=True, nozzles=2)
+        rod('stainless', (R1, 21, 7), (0, 21, 7), 0.6, 12)
+        rod('stainless', (0, 21, 7), (2, 17, 7), 0.6, 12)
     # Footprints for dressing: box, convection, fan house, red structure.
-    for a, b, top in (((-2, -2), (L + 2, D + 2), H1 + 14), ((C0 - 2, CD0), (C1 + 8, D + 8), 23), ((R0 - 1, 1), (R1 + 1, 13), 36)):
+    prints = [((-2, -2), (L + 2, D + 2), H1 + 14), ((C0 - 2, CD0), (C1 + 8, D + 8), 23)]
+    if secondary: prints.append(((-17, 1), (-4, 13), 36))
+    for a, b, top in prints:
         pts = [W(a[0], 0, a[1]), W(b[0], 0, a[1]), W(a[0], 0, b[1]), W(b[0], 0, b[1])]
         K.foot(min(p[0] for p in pts), min(p[2] for p in pts), max(p[0] for p in pts), max(p[2] for p in pts), top * s)
     def module(paint_u, y0, lift):
