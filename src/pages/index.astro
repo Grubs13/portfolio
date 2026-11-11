@@ -26,10 +26,20 @@ const contactId = scenes.find((s) => s.kind === 'contact')?.id;
         'WebGLRenderingContext' in window
       )
         document.documentElement.classList.add('world');
+      // Card prototypes for review: ?card=vignette|glass|plate|solid picks a text card style.
+      var card = new URLSearchParams(location.search).get('card');
+      if (card) document.documentElement.dataset.card = card;
     </script>
   </head>
   <body>
     <canvas class="world-canvas" aria-hidden="true"></canvas>
+    <nav class="card-review" aria-label="Card style prototypes">
+      <span>Card style</span>
+      <a href="?card=solid">Solid</a>
+      <a href="?card=vignette">Vignette</a>
+      <a href="?card=glass">Glass</a>
+      <a href="?card=plate">Plate</a>
+    </nav>
     <header class="site-header">
       {contactId && <a class="skip-link" href={`#${contactId}`}>Skip to contact</a>}
       <a href="#">Résumé</a>
@@ -325,6 +335,119 @@ const contactId = scenes.find((s) => s.kind === 'contact')?.id;
     .world .scene:nth-child(even) {
       margin-inline-start: auto;
     }
+  }
+
+  /* The opening: the page's title alone over the dark, no card. */
+  .scene-intro h1 {
+    font-size: clamp(4.5rem, 16vw, 10rem);
+  }
+
+  .scene-intro .tagline {
+    max-width: 34ch;
+    font-size: clamp(1.5rem, 3.2vw, 2.25rem);
+  }
+
+  .world .scene-intro {
+    justify-content: center;
+  }
+
+  .world .scene-intro .panel {
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+
+  /* ---- Card prototypes, chosen with ?card= while they are reviewed ---- */
+
+  .card-review {
+    display: none;
+  }
+
+  [data-card] .card-review {
+    position: fixed;
+    z-index: 10;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.4rem 0.8rem;
+    border-radius: 999px;
+    background: rgb(5 6 15 / 0.9);
+    font-size: 0.875rem;
+    white-space: nowrap;
+  }
+
+  [data-card] .card-review span {
+    color: var(--dust);
+  }
+
+  /* Every prototype keeps long cards to a phone's lower half: smaller text, tighter lists. */
+  @media (max-width: 899px) {
+    [data-card]:not([data-card='solid']) .scene:not(.scene-intro) .panel {
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+
+    [data-card]:not([data-card='solid']) .scene:not(.scene-intro) h2 {
+      font-size: 2rem;
+    }
+
+    [data-card]:not([data-card='solid']) .panel ul {
+      padding-left: 1.1rem;
+    }
+
+    [data-card]:not([data-card='solid']) .panel li + li {
+      margin-top: 0.35rem;
+    }
+  }
+
+  /* Vignette: no box edge. The text sits on a feathered dark backdrop that blurs out into the scene. */
+  .world[data-card='vignette'] .scene:not(.scene-intro) .panel {
+    padding: clamp(1.5rem, 5vw, 3rem);
+    border: 0;
+    border-radius: 48px;
+    background: rgb(5 6 15 / 0.78);
+    box-shadow: 0 0 56px 36px rgb(5 6 15 / 0.78);
+    text-shadow: 0 1px 2px rgb(5 6 15 / 0.9);
+  }
+
+  /* Glass: a translucent, blurred panel with a hairline edge, lighter than the solid card. */
+  .world[data-card='glass'] .scene:not(.scene-intro) .panel {
+    border: 1px solid rgb(232 235 255 / 0.12);
+    border-radius: 6px;
+    background: rgb(13 16 36 / 0.55);
+    -webkit-backdrop-filter: blur(10px) saturate(1.1);
+    backdrop-filter: blur(10px) saturate(1.1);
+    box-shadow: 0 8px 32px rgb(5 6 15 / 0.35);
+  }
+
+  /* Plate: a game-UI plate like the HUD in the style references: square stepped pixel corners and a hard offset shadow. */
+  .world[data-card='plate'] .scene:not(.scene-intro) .panel {
+    --step: 4px;
+    border: 0;
+    border-radius: 0;
+    background: rgb(13 16 36 / 0.94);
+    clip-path: polygon(
+      0 var(--step), var(--step) var(--step), var(--step) 0,
+      calc(100% - var(--step)) 0, calc(100% - var(--step)) var(--step), 100% var(--step),
+      100% calc(100% - var(--step)), calc(100% - var(--step)) calc(100% - var(--step)), calc(100% - var(--step)) 100%,
+      var(--step) 100%, var(--step) calc(100% - var(--step)), 0 calc(100% - var(--step))
+    );
+    box-shadow: inset 0 0 0 2px rgb(157 140 255 / 0.35);
+  }
+
+  /* On the section, since the plate's own clip would cut its shadow off. */
+  .world[data-card='plate'] .scene:not(.scene-intro) {
+    filter: drop-shadow(6px 6px 0 rgb(5 6 15 / 0.85));
+  }
+
+  .world[data-card='plate'] .scene:not(.scene-intro) .eyebrow {
+    display: inline-block;
+    padding: 0 0.5rem;
+    background: var(--nebula);
+    color: var(--space-0);
   }
 
   @media (prefers-reduced-motion: reduce) {

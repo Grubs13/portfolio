@@ -10,8 +10,8 @@ export interface Stage {
   object: Object3D;
   /** Where the camera aims at rest, relative to the anchor, so each scene frames its own subject. */
   look: Vec;
-  /** How the character is cast at the anchor: the pose it holds and its turn about y. It stands at the stage's default turn without one. */
-  cast?: Cast;
+  /** How the character is cast at the anchor: the pose it holds and its turn about y. It stands at the stage's default turn without one, and is left out when this is null. */
+  cast?: Cast | null;
   /** World units that must fit across the free part of the screen. Smaller frames the scene closer. */
   frame?: number;
 }
