@@ -188,18 +188,21 @@ export const glowMaterial = new ShaderMaterial({
 });
 
 /**
- * Draws the frame to the screen. Each scene is inked first: a pixel becomes
+ * Draws the frame to the screen from one buffer that holds scene A in its left
+ * half and scene B in its right. Each scene is inked first: a pixel becomes
  * outline when a neighbor lies farther away by more than `threshold` in depth.
  * While `progress` is above zero, scene B wipes in over scene A behind a
  * slanted edge that breaks up into chunky dither, rising with the scroll.
+ * `extent` is the part of each half a scene fills, since the buffer is
+ * allocated a little larger than the screen so it need not reallocate as the
+ * screen resizes.
  */
 export const screenMaterial = new ShaderMaterial({
   uniforms: {
-    tColorA: { value: null },
-    tDepthA: { value: null },
-    tColorB: { value: null },
-    tDepthB: { value: null },
+    tColor: { value: null },
+    tDepth: { value: null },
     texel: { value: new Vector2() },
+    extent: { value: new Vector2(0.5, 1) },
     threshold: { value: 0 },
     progress: { value: 0 },
   },
@@ -211,21 +214,29 @@ void main() {
 }
 `,
   fragmentShader: /* glsl */ `
-uniform sampler2D tColorA;
-uniform sampler2D tDepthA;
-uniform sampler2D tColorB;
-uniform sampler2D tDepthB;
+uniform sampler2D tColor;
+uniform sampler2D tDepth;
 uniform vec2 texel;
+uniform vec2 extent;
 uniform float threshold;
 uniform float progress;
 varying vec2 vUv;
 const vec3 INK = vec3(0.07, 0.06, 0.16);
-vec4 inked(sampler2D tColor, sampler2D tDepth, vec2 uv) {
+// Depth at a neighbor, kept inside the scene's own region so the halves never ink each other's edges.
+float depthAt(vec2 uv, vec2 lo, vec2 hi) {
+  return texture2D(tDepth, clamp(uv, lo, hi)).r;
+}
+// Scene A (side 0) or B (side 1) at a screen position, inked.
+vec4 inked(float side, vec2 screen) {
+  vec2 origin = vec2(side * 0.5, 0.);
+  vec2 lo = origin + texel * 0.5;
+  vec2 hi = origin + extent - texel * 0.5;
+  vec2 uv = origin + screen * extent;
   vec4 c = texture2D(tColor, uv);
   float d = texture2D(tDepth, uv).r;
   float far = max(
-    max(texture2D(tDepth, uv + vec2(texel.x, 0.)).r, texture2D(tDepth, uv - vec2(texel.x, 0.)).r),
-    max(texture2D(tDepth, uv + vec2(0., texel.y)).r, texture2D(tDepth, uv - vec2(0., texel.y)).r)
+    max(depthAt(uv + vec2(texel.x, 0.), lo, hi), depthAt(uv - vec2(texel.x, 0.), lo, hi)),
+    max(depthAt(uv + vec2(0., texel.y), lo, hi), depthAt(uv - vec2(0., texel.y), lo, hi))
   );
   if (d < 1. && far - d > threshold) c.rgb = mix(c.rgb, INK, 0.78);
   return c;
@@ -233,15 +244,14 @@ vec4 inked(sampler2D tColor, sampler2D tDepth, vec2 uv) {
 const float BAYER[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
 void main() {
   if (progress <= 0.) {
-    gl_FragColor = inked(tColorA, tDepthA, vUv);
+    gl_FragColor = inked(0., vUv);
     return;
   }
   ivec2 cell = ivec2(mod(floor(gl_FragCoord.xy / 3.), 4.));
   float dither = (BAYER[cell.x + cell.y * 4] + 0.5) / 16.;
   float along = vUv.y + (vUv.x - 0.5) * 0.3;
   float edge = progress * 1.54 - 0.22 + (dither - 0.5) * 0.14;
-  if (along < edge) gl_FragColor = inked(tColorB, tDepthB, vUv);
-  else gl_FragColor = inked(tColorA, tDepthA, vUv);
+  gl_FragColor = along < edge ? inked(1., vUv) : inked(0., vUv);
 }
 `,
   depthTest: false,
