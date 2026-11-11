@@ -17,7 +17,6 @@ UP = Vector((0, 1, 0))
 class Kit:
     def __init__(self, P, site, rnd):
         self.P, self.site, self.rnd = P, site, rnd
-        self.conflicts = []
 
     # ---- primitives ----
     def box(self, paint, c, size, yaw=0.0, bevel=0.0, glow=False):
@@ -71,13 +70,9 @@ class Kit:
         self.site.cover(Vector((min(x0, x1), 0, min(z0, z1))), Vector((max(x0, x1), y, max(z0, z1))), paint)
 
     def foot(self, x0, z0, x1, z1, top, pad=0.3):
-        """Registers a footprint, and records it if it stands in a flight path."""
+        """Registers a footprint, so set dressing keeps clear of it."""
         lo_x, hi_x, lo_z, hi_z = min(x0, x1), max(x0, x1), min(z0, z1), max(z0, z1)
         self.site.mark(lo_x, lo_z, hi_x, hi_z, pad)
-        for p in self.site.paths:
-            if p.y < top + 2.4 and lo_x - 1.4 < p.x < hi_x + 1.4 and lo_z - 1.4 < p.z < hi_z + 1.4:
-                self.conflicts.append(((round(lo_x, 1), round(lo_z, 1), round(hi_x, 1), round(hi_z, 1)), round(top, 1)))
-                break
 
     # ---- access steel ----
     def handrail(self, a, b, h=0.5, paint='safetyYellow'):

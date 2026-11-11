@@ -3,12 +3,9 @@
 # spent harp out while a second sets a new convection module in its slot, the unit
 # packed in close behind it, and the turnaround camp on the gravel in front. The
 # row runs away from the road with the convection section and stack at the near
-# end, so the camera sees a long panelled wall and the convection end. The flight
-# paths leave to screen-right, so the plant and both cranes stand to screen-left
-# of the anchor.
+# end, so the camera sees a long panelled wall and the convection end.
 import math
 from mathutils import Vector
-SCENE_ID = 'reformer-reharp'
 S = 0.34
 YAW = 3 * math.pi / 2
 # The reformer frame's origin: its burner end wall, far from the road.
@@ -111,8 +108,7 @@ def layout(K):
             K.box(rnd.choice(['carSilver', 'tube', 'carBlue', 'carRed', 'black']), (23 + (i % 10) * 1.5, 0.45, 23.5 + (i // 10) * 5), (0.85, 0.5, 1.8), 0, 0.05)
     for x in range(-44, 38, 9):
         if x < -12 or x > 6: K.light_pole(x + 0.5, 5.2, 5.0)
-    # East of the road, under the flight paths, only low things: scaffold and steel laydown, a stores building,
-    # folded hydraulic cranes, crane mats and a pipe-spool yard.
+    # East of the road: scaffold and steel laydown, a stores building, folded hydraulic cranes, crane mats and a pipe-spool yard.
     K.building(14, -24, 24, -16, 3.2, 'corrugated', 'gable', doors=2, louvres=2)
     for i in range(12):
         x, z = 10 + (i % 4) * 4.2, -10 + (i // 4) * 3.4

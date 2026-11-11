@@ -8,12 +8,11 @@ def T(x, y, z, yaw=0.0, s=(1, 1, 1)):
     return Matrix.Translation((x, y, z)) @ Matrix.Rotation(yaw, 4, 'Y') @ Matrix.Diagonal((*s, 1))
 
 class Site:
-    """Free ground for set dressing: what the kit has placed, what covers the ground, and the flight paths."""
-    def __init__(self, paths, cell=0.5, radius=72):
+    """Free ground for set dressing: what the kit has placed and what covers the ground."""
+    def __init__(self, cell=0.5, radius=72):
         self.cell, self.radius, self.taken = cell, radius, set()
         self.ground = {}
         self.decks = []
-        self.paths = [Vector(p) for p in paths]
 
     def cover(self, lo, hi, paint):
         if (hi.x - lo.x) * (hi.z - lo.z) > 20000: return
@@ -37,17 +36,12 @@ class Site:
             for j in range(math.floor((z0 - pad) / self.cell), math.floor((z1 + pad) / self.cell) + 1):
                 self.taken.add((i, j))
 
-    def clear_of_paths(self, x, z, top, margin=1.6):
-        for p in self.paths:
-            if p.y < top + 2.4 and math.hypot(p.x - x, p.z - z) < margin: return False
-        return True
-
     def free(self, x, z, half=0.4, top=1.0):
         if math.hypot(x, z) > self.radius - half: return False
         for i in range(math.floor((x - half) / self.cell), math.floor((x + half) / self.cell) + 1):
             for j in range(math.floor((z - half) / self.cell), math.floor((z + half) / self.cell) + 1):
                 if (i, j) in self.taken: return False
-        return self.clear_of_paths(x, z, top)
+        return True
 
     def claim(self, x, z, half=0.4, top=1.0):
         if not self.free(x, z, half, top): return False
@@ -332,12 +326,11 @@ def dress_ground(P, site, rnd, tufts=1500, flowers=300, bushes=60, skids=20):
 def dress_decks(P, site, rnd, n=30):
     """Crews up on the platforms and walkways."""
     placed = 0
-    decks = [d for d in site.decks if site.clear_of_paths((d[0].x + d[1].x) / 2, (d[0].z + d[1].z) / 2, d[1].y + 2)]
+    decks = list(site.decks)
     rnd.shuffle(decks)
     for lo, hi in decks[: n * 2]:
         if placed >= n: break
         x, z = rnd.uniform(lo.x + 0.3, hi.x - 0.3), rnd.uniform(lo.z + 0.3, hi.z - 0.3)
-        if not site.clear_of_paths(x, z, hi.y + 2): continue
         person(P, x, hi.y, z, rnd.uniform(-3.1, 3.1), rnd.choice(['hiVis', 'tankOrange']), rnd.choice(['stand', 'point', 'crouch']), rnd)
         placed += 1
     return placed

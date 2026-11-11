@@ -9,7 +9,7 @@ const smoothstep = (x: number) => x * x * (3 - 2 * x);
 
 /**
  * Places scene i at progress i / (sceneCount - 1) and centers a dwell window
- * on it, with travel segments between neighbouring windows. The first and last
+ * on it, with a transition between neighbouring windows. The first and last
  * scenes get half a window each, since progress cannot go past them.
  * `dwellShare` is the fraction of total progress spent dwelling, summed across
  * all scenes.

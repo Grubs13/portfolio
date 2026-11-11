@@ -2,11 +2,9 @@
 # plant-design research, at about 0.18 units per metre with heights a little
 # exaggerated so they read. x runs east and z south, so the camera looks north-west.
 # The character stands at the anchor on the main east-west road in front of the
-# ammonia block; the flight paths leave south (+z) and west (-x), rising, so
-# everything tall stands up-screen of the road.
+# ammonia block, with everything tall up-screen of the road.
 import math
 from mathutils import Vector
-SCENE_ID = 'reliability-engineer'
 S = 0.18
 # People and their clutter at plant scale.
 SET_SCALE = 0.62

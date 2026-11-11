@@ -146,7 +146,6 @@ export const palette = {
   lens: paint(0x9db9dc),
   undershirt: paint(0xcdbb9c),
   boots: paint(0xa97c4e),
-  pack: paint(0x4b5165),
   lamp: glow(0xfff2c2),
   detectorLed: glow(0x5cff7a),
   flame: glow(0xffa040),

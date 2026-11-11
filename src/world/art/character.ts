@@ -5,25 +5,19 @@ import { palette, type Paint } from './palette';
 
 // Calen in turnaround gear: white hard hat with headlamp, glasses, navy FR
 // henley with hi-vis stripes, chest harness carrying a radio and a gas
-// detector, navy cargo pants with hi-vis shin bands and tan work boots. The
-// jetpack is what carries him between islands. He faces +z.
+// detector, navy cargo pants with hi-vis shin bands and tan work boots. He
+// faces +z.
 //
 // Rounded parts with smooth shading stand in until a sculpted model replaces
 // them (see `model.ts`); both satisfy `Character`.
 
 export interface Character {
   root: Group;
-  /**
-   * Sets the pose for a moment of travel: `flight` runs from 0 standing to 1
-   * mid-flight, and `stride` counts the limb swings travelled so far.
-   */
-  pose(flight: number, stride: number): void;
 }
 
 /** Drawn larger than the workers around him, so he reads at a glance and his gear shows. */
 export const CHARACTER_SCALE = 1.3;
 const HIP_HEIGHT = 0.9;
-const LEAN = 0.45;
 
 function pivot(child: Object3D, x: number, y: number, z = 0): Group {
   const g = new Group();
@@ -101,41 +95,16 @@ function torsoAndHead(): Object3D {
   shape(m, palette.headband, band(0.272, 0.05), [0, 1.12, -0.01], [1, 1, 1.06]);
   m.box(palette.black, [0, 1.15, 0.28], [0.13, 0.09, 0.06]);
   m.box(palette.lamp, [0, 1.15, 0.313], [0.08, 0.055, 0.015]);
-
-  // Jetpack: twin tanks with a nozzle under each.
-  for (const x of [-0.11, 0.11]) {
-    shape(m, palette.pack, capsule(0.1, 0.32), [x, 0.4, -0.27]);
-    m.frustum(palette.steelDark, [x, 0.12, -0.27], 0.05, 0.08, 0.1, 8);
-  }
-  m.box(palette.black, [0, 0.48, -0.2], [0.42, 0.05, 0.06]);
   return m.build();
 }
 
 export function buildCharacter(): Character {
-  const arms = [pivot(arm(), -0.39, 0.58), pivot(arm(), 0.39, 0.58)] as const;
-  const legs = [pivot(leg(), -0.14, 0), pivot(leg(), 0.14, 0)] as const;
-  const flameModel = new MergedModel();
-  for (const x of [-0.11, 0.11]) flameModel.box(palette.flame, [x, -0.3, 0], [0.12, 0.6, 0.12]);
-  const flame = pivot(flameModel.build(), 0, 0.08, -0.27);
-  // Pivots at the hips, so leaning tips the torso and not the feet.
   const body = new Group();
-  body.add(torsoAndHead(), flame, ...arms, ...legs);
+  body.add(torsoAndHead(), pivot(arm(), -0.39, 0.58), pivot(arm(), 0.39, 0.58), pivot(leg(), -0.14, 0), pivot(leg(), 0.14, 0));
   body.position.y = HIP_HEIGHT;
   const root = new Group();
   root.add(body);
   root.scale.setScalar(CHARACTER_SCALE);
 
-  return {
-    root,
-    pose(flight, stride) {
-      const swing = Math.sin(stride * 2 * Math.PI) * flight;
-      body.rotation.x = LEAN * flight;
-      arms[0].rotation.x = 0.7 * swing;
-      arms[1].rotation.x = -0.7 * swing;
-      legs[0].rotation.x = 0.5 * flight + 0.25 * swing;
-      legs[1].rotation.x = 0.5 * flight - 0.25 * swing;
-      flame.visible = flight > 0.02;
-      flame.scale.y = Math.max(flight, 0.01);
-    },
-  };
+  return { root };
 }

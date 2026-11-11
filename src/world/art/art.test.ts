@@ -1,17 +1,12 @@
 import { readFile } from 'node:fs/promises';
-import { Box3, Mesh, type Object3D, Triangle, Vector3 } from 'three';
+import { Mesh, type Object3D, Triangle, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { type Scene, scenes } from '../../content/scenes';
-import { STAGE_RADIUS, layoutScenes, pointOnSegment } from '../layout';
+import { STAGE_RADIUS } from '../layout';
 import { stageFor, SCENE_ART } from '.';
-import { CHARACTER_SCALE } from './character';
 import type { StageBuilder } from './kit';
 import { PLACEHOLDERS } from './placeholders';
 import { SCENE_MODELS, sceneLoader, stageFromGltf } from './sceneModel';
-
-// Generous bounds of the character in any travel pose, measured from its feet.
-const BODY_HALF_WIDTH = 0.45 * CHARACTER_SCALE;
-const BODY_HEIGHT = 2.3 * CHARACTER_SCALE;
 
 function meshes(object: Object3D): Mesh[] {
   object.updateMatrixWorld(true);
@@ -84,26 +79,5 @@ describe('scene art', () => {
   it.each(scenesWithArt)('merges the %s art into one mesh per material, so it costs one draw call each', (_, i) => {
     const parts = meshes(build(scenes[i]!).object);
     expect(new Set(parts.map((m) => m.material)).size).toBe(parts.length);
-  });
-
-  it.each(scenesWithArt)('keeps the travel paths into and out of %s clear of its art', (_, i) => {
-    const layout = layoutScenes(scenes);
-    const anchor = layout.anchors[i]!;
-    const stage = build(scenes[i]!).object;
-    stage.position.set(anchor.x, anchor.y, anchor.z);
-    // The path rises out of the rock below, so only parts above the walkable surface count.
-    const props = triangles(stage).filter((t) => Math.max(t.a.y, t.b.y, t.c.y) > anchor.y + 0.01);
-    const segments = [layout.segments[i - 1], layout.segments[i]].filter((s) => s !== undefined);
-    for (const segment of segments) {
-      for (let step = 1; step < 100; step++) {
-        const p = pointOnSegment(segment, step / 100);
-        const body = new Box3(
-          new Vector3(p.x - BODY_HALF_WIDTH, p.y + 0.05, p.z - BODY_HALF_WIDTH),
-          new Vector3(p.x + BODY_HALF_WIDTH, p.y + BODY_HEIGHT, p.z + BODY_HALF_WIDTH),
-        );
-        const where = [p.x - anchor.x, p.y - anchor.y, p.z - anchor.z].map((n) => n.toFixed(1)).join(', ');
-        expect(props.some((t) => body.intersectsTriangle(t)), `collides at t = ${step / 100}, (${where}) from the anchor`).toBe(false);
-      }
-    }
   });
 });

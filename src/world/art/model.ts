@@ -1,10 +1,10 @@
-import { AnimationClip, AnimationMixer, Box3, Color, Float32BufferAttribute, Group, Mesh, type MeshStandardMaterial } from 'three';
+import { Box3, Color, Float32BufferAttribute, Group, Mesh, type MeshStandardMaterial } from 'three';
 import { buildCharacter, type Character, CHARACTER_SCALE } from './character';
 import { smoothMaterial } from './materials';
 import { sceneLoader } from './sceneModel';
 
 /**
- * A sculpted, rigged character exported from Blender as a GLB. Give each part a
+ * A character modelled in Blender and exported as a GLB. Give each part a
  * flat base color rather than a texture: the toon shader bands the color itself,
  * and textures are not read.
  */
@@ -14,8 +14,6 @@ export interface CharacterModel {
   height: number;
   /** Turn applied so the model faces +z, in radians. */
   yaw?: number;
-  /** A clip holding the standing pose, applied once; without one the model stands in its rest pose. */
-  pose?: string;
 }
 
 /** Calen, modelled in Blender by `blender/character.py` and packed with gltfpack. The stand-in from `character.ts` is used if it fails to load. */
@@ -37,7 +35,7 @@ function paintVertices(mesh: Mesh) {
   mesh.material = smoothMaterial;
 }
 
-export async function loadCharacter({ url, height, yaw = 0, pose }: CharacterModel): Promise<Character> {
+export async function loadCharacter({ url, height, yaw = 0 }: CharacterModel): Promise<Character> {
   const gltf = await (await sceneLoader()).loadAsync(url);
   const model = gltf.scene;
   model.traverse((child) => {
@@ -52,16 +50,7 @@ export async function loadCharacter({ url, height, yaw = 0, pose }: CharacterMod
   const root = new Group();
   root.add(model);
 
-  if (pose) {
-    const clip = AnimationClip.findByName(gltf.animations, pose);
-    if (!clip) throw new Error(`${url} has no "${pose}" clip; it has ${gltf.animations.map((c) => c.name).join(', ')}`);
-    const mixer = new AnimationMixer(model);
-    mixer.clipAction(clip).play();
-    mixer.update(0);
-  }
-
-  // He holds the same pose in flight; the stage still turns him to face the way he travels.
-  return { root, pose() {} };
+  return { root };
 }
 
 /** The sculpted character when one is set and loads, otherwise the stand-in. */

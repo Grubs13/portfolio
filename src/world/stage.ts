@@ -18,7 +18,7 @@ import type { TimelineState } from '../lib/timeline';
 import { stageFor } from './art';
 import type { Character } from './art/character';
 import type { StageBuilder } from './art/kit';
-import { screenMaterial, shadowUniforms, SUN, type Transition, TRANSITIONS } from './art/materials';
+import { screenMaterial, shadowUniforms, SUN } from './art/materials';
 import type { WorldLayout } from './layout';
 
 /** Where on screen the subject is framed, as fractions of width and of height from the top. */
@@ -76,13 +76,12 @@ export function createStage(
   character: Character,
   /** Stages loaded from scene models, keyed by scene id. */
   loaded: Partial<Record<string, StageBuilder>> = {},
-  transition: Transition = 'push',
 ): Stage {
   // Each scene renders at art-pixel resolution into a target, the screen pass
   // inks it and writes that same resolution to the canvas, and CSS scales the
   // canvas up with hard pixel edges. Fewer pixels make it cheaper than a
   // full-size render. Between scenes, the outgoing and incoming scenes each
-  // render into their own target and the screen pass moves from one to the other.
+  // render into their own target and the screen pass wipes from one to the other.
   const renderer = new WebGLRenderer({ canvas, alpha: true, antialias: false, powerPreference: 'low-power' });
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = LinearSRGBColorSpace;
@@ -102,7 +101,6 @@ export function createStage(
   });
   world.add(character.root);
   character.root.rotation.y = IDLE_YAW;
-  character.pose(0, 0);
 
   // Sunlight shadows come from a depth map rendered from the sun, centered on the character.
   const sunCamera = new OrthographicCamera(-SHADOW_REACH, SHADOW_REACH, SHADOW_REACH, -SHADOW_REACH, 1, SHADOW_DEPTH);
@@ -122,7 +120,6 @@ export function createStage(
   uniforms.tDepthA!.value = outgoing.depthTexture;
   uniforms.tColorB!.value = incoming.texture;
   uniforms.tDepthB!.value = incoming.depthTexture;
-  uniforms.mode!.value = TRANSITIONS[transition];
 
   const camera = new OrthographicCamera(-1, 1, 1, -1, NEAR, FAR);
   const look = new Vector3();
