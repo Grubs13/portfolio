@@ -80,6 +80,9 @@ POSES = ('stand', 'walk', 'carry', 'point', 'crouch')
 
 # Scenes at plant scale shrink people and their clutter so they sit right beside the equipment.
 SET_SCALE = 1.0
+# 'light' builds workers for scenes where they are only a few pixels tall: no smoothing pass on the body,
+# a coarser head and hat, and no nose, glasses or modelled hands. A scene sets it like SET_SCALE.
+WORKER_DETAIL = 'full'
 # A worker's height to the top of the hard hat, standing, at SET_SCALE 1.
 WORKER_HEIGHT = 1.95
 HEAD = Vector((0, 0, 1.86))
@@ -96,9 +99,11 @@ def worker_region(c):
     if 0.98 < z < 1.6: return 'vest'
     return 'coverall'
 
-def worker_parts(collection):
-    """Head, hard hat, glasses and mitten hands at rest, as (region, joint, bmesh)."""
+def worker_parts(collection, light=False):
+    """Head, hard hat, glasses and mitten hands at rest, as (region, joint, bmesh). A light worker
+    keeps only the head and hat, more coarsely divided."""
     parts = []
+    seg = (6, 4) if light else (10, 7)
     def part(region, joint, maker, M, sub=0):
         b = bmesh.new(); maker(b); bmesh.ops.transform(b, matrix=M, verts=b.verts)
         parts.append((region, joint, smoothed(collection, b, sub) if sub else b))
@@ -108,19 +113,21 @@ def worker_parts(collection):
     hair = lambda c: c.y > HEAD.y + 0.03 and c.z > HEAD.z - 0.08
     for region, keep in (('skin', lambda c: not hair(c)), ('hair', hair)):
         b = bmesh.new()
-        bmesh.ops.create_uvsphere(b, u_segments=10, v_segments=7, radius=1)
+        bmesh.ops.create_uvsphere(b, u_segments=seg[0], v_segments=seg[1], radius=1)
         bmesh.ops.transform(b, matrix=at(HEAD, (0.17, 0.18, 0.2)), verts=b.verts)
         bmesh.ops.delete(b, geom=[f for f in b.faces if not keep(f.calc_center_median())], context='FACES')
         parts.append((region, 'neckTop', b))
-    part('skin', 'neckTop', cube, at(HEAD + Vector((0, -0.18, -0.02)), (0.045, 0.05, 0.065)))
+    if not light: part('skin', 'neckTop', cube, at(HEAD + Vector((0, -0.18, -0.02)), (0.045, 0.05, 0.065)))
     # A domed hard hat with a brim.
+    ring = 8 if light else 12
     dome = bmesh.new()
-    bmesh.ops.create_uvsphere(dome, u_segments=12, v_segments=6, radius=1)
+    bmesh.ops.create_uvsphere(dome, u_segments=ring, v_segments=4 if light else 6, radius=1)
     bmesh.ops.delete(dome, geom=[v for v in dome.verts if v.co.z < -1e-4], context='VERTS')
     bmesh.ops.transform(dome, matrix=at(HEAD + Vector((0, 0, 0.07)), (0.2, 0.215, 0.17)), verts=dome.verts)
     parts.append(('hat', 'neckTop', dome))
-    part('hat', 'neckTop', lambda b: bmesh.ops.create_cone(b, cap_ends=True, segments=12, radius1=1, radius2=1, depth=1),
+    part('hat', 'neckTop', lambda b: bmesh.ops.create_cone(b, cap_ends=True, segments=ring, radius1=1, radius2=1, depth=1),
          at(HEAD + Vector((0, -0.03, 0.075)), (0.245, 0.27, 0.03)))
+    if light: return parts
     for s in (-1, 1): part('glasses', 'neckTop', cube, at(HEAD + Vector((s * 0.068, -0.168, 0.03)), (0.085, 0.025, 0.05)))
     for side in 'RL':
         wx, wy, wz = JOINTS[f'wrist{side}'][0]
@@ -137,19 +144,21 @@ FIGURES = {}
 def figure(pose):
     """A worker in `pose`, built once: {region: (verts, faces)} in three.js axes, standing on y = 0
     and facing +z, and where a carried load sits between the hands."""
-    if pose in FIGURES: return FIGURES[pose]
-    if pose != 'stand' and 'stand' not in FIGURES: figure('stand')
+    key = (pose, WORKER_DETAIL)
+    if key in FIGURES: return FIGURES[key]
+    if pose != 'stand' and ('stand', WORKER_DETAIL) not in FIGURES: figure('stand')
+    light = WORKER_DETAIL == 'light'
     collection = bpy.context.scene.collection
     G = pose_matrices(WORKER_POSES[pose])
     regions = ['boot', 'legBand', 'coverall', 'armBand', 'skin', 'vestBand', 'vest']
-    body = skin_body(collection, G, 1, lambda c: regions.index(worker_region(c)))
+    body = skin_body(collection, G, 0 if light else 1, lambda c: regions.index(worker_region(c)))
     pieces = split_by_material(body, regions)
-    for region, joint, bm in worker_parts(collection):
+    for region, joint, bm in worker_parts(collection, light):
         bm.transform(rider(G, joint))
         pieces.append((region, bm))
     low = min(v.co.z for _, bm in pieces for v in bm.verts)
     top = max(v.co.z for _, bm in pieces for v in bm.verts)
-    scale = WORKER_HEIGHT / (top - low) if pose == 'stand' else FIGURES['stand'][2]
+    scale = WORKER_HEIGHT / (top - low) if pose == 'stand' else FIGURES[('stand', WORKER_DETAIL)][2]
     M = Matrix.Diagonal((scale,) * 3 + (1,)) @ Matrix.Translation((0, 0, -low))
     out = {}
     for region, bm in pieces:
@@ -160,8 +169,8 @@ def figure(pose):
         bm.free()
     hands = [M @ (G[f'wrist{s}'] @ Vector(JOINTS[f'wrist{s}'][0])) for s in 'RL']
     load = (hands[0] + hands[1]) / 2
-    FIGURES[pose] = (out, (load.x, load.z - 0.08 * scale, -load.y + 0.06 * scale), scale)
-    return FIGURES[pose]
+    FIGURES[key] = (out, (load.x, load.z - 0.08 * scale, -load.y + 0.06 * scale), scale)
+    return FIGURES[key]
 
 def split_by_material(bm, regions):
     """One bmesh per material index, named by `regions`."""
@@ -200,7 +209,7 @@ def person(P, x, y, z, yaw, vest='hiVis', pose='stand', rnd=random):
         box(P, rnd.choice(['plank', 'timber', 'casing', 'pipeBlue']), M @ T(*load), 0.6, 0.3, 0.4, 0.04)
     paints['hat'] = rnd.choice(['hardHat', 'hardHat', 'hardHat', 'safetyYellow', 'tankOrange', 'pipeBlue'])
     for region, (v, f) in regions.items():
-        if paints[region]: P.add(paints[region], False, v, f, M)
+        if paints.get(region): P.add(paints[region], False, v, f, M)
 
 def varied(vest, pose, look):
     """Some of a crew work without a vest, and some kneel instead of crouching."""
