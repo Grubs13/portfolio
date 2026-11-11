@@ -1,38 +1,16 @@
-// Writes every scene's parts and flight paths to blender/out for the Blender build.
-// The code-built scenes stay the source of layout; Blender rebuilds and dresses them.
+// Writes the palette and every scene's flight paths to blender/out for the Blender scripts,
+// so models use the site's paints by name and keep clear of the paths the character flies.
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { Matrix4 } from 'three';
 import { it } from 'vitest';
 import { scenes } from '../src/content/scenes';
-import { carseland } from '../src/world/art/carseland';
-import { MergedModel } from '../src/world/art/merged';
 import { palette } from '../src/world/art/palette';
-import { reformerReharp } from '../src/world/art/reformerReharp';
 import { layoutScenes, pointOnSegment } from '../src/world/layout';
 
 const OUT = new URL('./out/', import.meta.url);
-const names = new Map<number, string>();
-for (const [name, paint] of Object.entries(palette)) if (!names.has(paint.color)) names.set(paint.color, name);
 
-it('dumps scene parts and flight paths', () => {
+it('dumps the palette and flight paths', () => {
   mkdirSync(OUT, { recursive: true });
-  const colors = Object.fromEntries(Object.entries(palette).map(([name, paint]) => [name, paint.color]));
-  for (const [name, build] of [['reformer', reformerReharp], ['carseland', carseland]] as const) {
-    const parts: unknown[] = [];
-    const add = MergedModel.prototype.add;
-    MergedModel.prototype.add = function (paint, geometry, matrix) {
-      const base = (this as unknown as { base: Matrix4 }).base;
-      const parameters = (geometry as unknown as { parameters?: unknown }).parameters ?? null;
-      const m = new Matrix4().multiplyMatrices(base, matrix).elements.map((e) => +e.toFixed(5));
-      parts.push({ p: names.get(paint.color) ?? paint.color, g: paint.glow ? 1 : 0, t: geometry.type, a: parameters, m });
-      return add.call(this, paint, geometry, matrix);
-    };
-    try {
-      writeFileSync(new URL(`${name}.json`, OUT), JSON.stringify({ look: build().look, colors, parts }));
-    } finally {
-      MergedModel.prototype.add = add;
-    }
-  }
+  writeFileSync(new URL('palette.json', OUT), JSON.stringify(Object.fromEntries(Object.entries(palette).map(([name, paint]) => [name, paint.color]))));
 
   const layout = layoutScenes(scenes);
   const paths: Record<string, number[][]> = {};

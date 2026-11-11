@@ -17,8 +17,8 @@ export interface SceneModel {
 
 /** Scenes whose stage comes from a GLB in `public/`, keyed by scene id. They replace the code art in `SCENE_ART`. */
 export const SCENE_MODELS: Readonly<Partial<Record<string, SceneModel>>> = {
-  'reliability-engineer': { url: '/models/carseland.glb', look: [-2, 7, -4] },
-  'reformer-reharp': { url: '/models/reformer-reharp.glb', look: [-6.31, 7, 0.38] },
+  'reliability-engineer': { url: '/models/carseland.glb', look: [-5, 6, -8] },
+  'reformer-reharp': { url: '/models/reformer-reharp.glb', look: [-7, 6, -1.5] },
 };
 
 /** The pixel texture of the palette paint a Blender material is named after, as `paint_<name>`. */

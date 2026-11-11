@@ -1,46 +1,143 @@
-# Turnaround set dressing for the reformer re-harp. The scene's row frame (u along
-# the reformer row, v toward the viewer) is turned ROW_YAW from the world.
+# The Carseland Kellogg reformer mid-turnaround, close up at 0.34 units per metre:
+# the penthouse roof off over the harps being changed, one crawler crane lifting a
+# spent harp out while a second sets a new convection module in its slot, the unit
+# around it, and the turnaround camp on the gravel in front. The row is turned so
+# the camera sees the tunnel-burner end wall and the long front wall, as in the
+# photos. The flight paths leave to screen-right, so the plant and both cranes
+# stand to screen-left of the anchor.
 import math
+from mathutils import Vector
 SCENE_ID = 'reformer-reharp'
-ROW_YAW = 5 * math.pi / 12
+S = 0.34
+YAW = 5 * math.pi / 12
+SET_SCALE = 0.85
 
-def row(u, v):
-    c, s = math.cos(ROW_YAW), math.sin(ROW_YAW)
-    return u * c + v * s, -u * s + v * c
+def layout(K):
+    rnd = K.rnd
+    # Ground: hay land to the stage rim, the gravel pad, concrete under the unit, the roads.
+    K.cyl('fieldGreen', (0, -0.02, 0), 74.6, 0.04, 48)
+    K.site.cover(Vector((-74, 0, -74)), Vector((74, 0.02, 74)), 'fieldGreen')
+    K.ground('gravel', -48, -46, 40, 34)
+    K.ground('concrete', -24, -30, -4, 8, 0.05)
+    for x0, z0, x1, z1 in ((-48, 1.8, 40, 4.6), (-3.6, -46, -1.0, 34), (-48, -38, 40, -35.5)):
+        K.ground('road', x0, z0, x1, z1, 0.06)
+    K.fence([(-48, -46), (40, -46), (40, 34), (-48, 34), (-48, -46)], 0.8)
+
+    R = kellogg_reformer(K, -12.5, 6.0, YAW, S, opening=(10, 18), empty_slot=True)
+    W = R['W']
+
+    # Harp lift: a spent harp, a row of tubes on its outlet collector, rigged under a spreader and lifted clear.
+    hu, hv = 14.0, 10.0
+    hx, _, hz = W(hu, 0, hv)
+    hook = crawler_crane(K, -27, 0.5, (hx, 24.5, hz), 15.5, 0.9)
+    top_y, length = 13.2, 7.0
+    for k in range(7):
+        p = Vector(W(hu - 4 + k * 1.3, 0, hv))
+        K.rod('tube', (p.x, top_y - length, p.z), (p.x, top_y, p.z), 0.12, 8)
+    a, b = Vector(W(hu - 4.6, 0, hv)), Vector(W(hu + 4.6, 0, hv))
+    K.rod('stainless', (a.x, top_y + 0.1, a.z), (b.x, top_y + 0.1, b.z), 0.2, 10)
+    K.rod('stainless', (a.x, top_y - length, a.z), (b.x, top_y - length, b.z), 0.24, 10)
+    K.rod('safetyYellow', (a.x, top_y + 1.0, a.z), (b.x, top_y + 1.0, b.z), 0.14, 8)
+    slings(K, hook, [Vector((a.x, top_y + 1.0, a.z)), Vector((b.x, top_y + 1.0, b.z))])
+    for p in (a, b): K.rod('black', (p.x, top_y + 1.0, p.z), (p.x, top_y + 0.1, p.z), 0.03, 4)
+    # Tag lines down to the crew steadying it.
+    K.rod('safetyYellow', (a.x, top_y - length, a.z), (a.x + 3.0, 0.9, a.z + 2.4), 0.02, 3)
+
+    # Module lift: a new convection module hanging over its empty slot from the second crane.
+    mu, my = R['slot']
+    corners = R['module'](mu, my, 6.0)
+    mx, _, mz = W(mu + 3.05, 0, 10.0)
+    hook2 = crawler_crane(K, -24.5, -22, (mx, 25.5, mz), 18.6, 0.95)
+    slings(K, hook2, [Vector(c) for c in corners])
+
+    # The unit behind: the main pipe rack with air coolers, columns, the compressor house and the cooling tower beyond.
+    K.pipe_rack((-46, -14), (-26, -14), width=2.6, tiers=(2.2, 3.0, 3.8), seed=7, fans=3)
+    K.pipe_rack((-35, -14), (-35, 24), width=2.2, tiers=(2.2, 3.0), seed=8)
+    K.vessel(-34, -22, 0.9, 11.5, platforms=(0.3, 0.55, 0.8, 0.98), davit=True)
+    K.vessel(-37.5, -23, 1.05, 12.5, platforms=(0.3, 0.55, 0.8, 0.98), davit=True)
+    K.vessel(-31, -26, 0.7, 5, platforms=(0.98,))
+    K.exchanger_bank(-42, -24, 3, 0.35, 3.0, True, 2)
+    K.building(-46, -10, -34, -4, 4.4, 'corrugated', 'gable', doors=3, louvres=4)
+    K.pumps(-44, -16.6, 8, 1.6)
+    K.cooling_tower(-40, -34, 6, 3.6, 4.0, True, True)
+    K.tank(-38, 14, 3.4, 4.0, 'tube', 'cone', bund=0)
+    K.tank(-38, 24, 2.6, 3.0, 'tankOrange', 'flat')
+
+    # Turnaround laydown in front of the burner wall: new harps on the tube stand under a tent, spent harps on cribbing.
+    for row, (x0, z0) in enumerate(((-4.0, 13.0), (-4.0, 16.5))):
+        for k in range(3): K.box('timber', (x0 + k * 3.2, 0.18, z0), (0.35, 0.35, 2.4), 0, 0.03)
+        for i in range(7):
+            K.rod('tube' if row == 0 else 'rustLight', (x0 - 0.6, 0.5 + (i % 2) * 0.2, z0 - 0.9 + i * 0.3), (x0 + 7.0, 0.5 + (i % 2) * 0.2, z0 - 0.9 + i * 0.3), 0.1, 8)
+        K.foot(x0 - 0.8, z0 - 1.3, x0 + 7.2, z0 + 1.3, 0.9)
+    K.sprung_dome(8.0, 24.0, 9.0, 2.2, 0, 'tube')
+    # Spare convection module on cribbing, catalyst bins and supersacks, crane mats.
+    K.box('casing', (12, 1.6, 12.5), (6.1 * S, 3.9 * S, 13 * S), YAW, 0.05)
+    K.foot(10, 10, 14, 15, 2.2)
+    for i in range(6):
+        K.box('tube', (16 + (i % 3) * 1.2, 0.5, 9 + (i // 3) * 1.2), (0.9, 0.9, 0.9), 0, 0.12)
+        K.foot(15.4 + (i % 3) * 1.2, 8.4 + (i // 3) * 1.2, 16.6 + (i % 3) * 1.2, 9.6 + (i // 3) * 1.2, 0.9)
+    for k in range(6): K.box('timber', (-20, 0.1 + k * 0.18, 18), (1.3, 0.17, 6.0), 0, 0.02)
+    K.foot(-20.7, 15, -19.3, 21, 1.2)
+    # Trailer city across the road: offices, lunch trailers, washrooms, tool cribs, light towers, buses.
+    for i in range(6):
+        K.building(6 + i * 4.2, 28, 9.8 + i * 4.2, 30.4, 1.6, 'tube', 'flat', doors=1, windows=2, louvres=0, vents=1)
+    for i in range(5):
+        K.box(rnd.choice(['canBlue', 'canRed', 'canGreen', 'stackGrey']), (-14 + i * 3.2, 0.6, 28.5), (2.8, 1.2, 1.2), 0, 0.05)
+        K.foot(-15.4 + i * 3.2, 27.9, -12.6 + i * 3.2, 29.1, 1.2)
+    for i in range(6): K.box('portaBlue', (-26 + i * 0.9, 0.6, 26), (0.7, 1.2, 0.7), 0, 0.05)
+    K.foot(-26.4, 25.6, -21.1, 26.4, 1.2)
+    for i in range(3):
+        K.box('tube', (24 + i * 4.5, 0.9, 20), (3.8, 1.6, 1.4), 0, 0.1)
+        K.box('window', (24 + i * 4.5, 1.2, 20.72), (3.2, 0.4, 0.04))
+        K.foot(22, 19.3, 26 + i * 4.5, 20.7, 1.8)
+    for (x, z) in ((2, 10), (-6, 22), (20, 14), (-18, 12)):
+        light_tower(K, x, z)
+    K.ground('asphalt', 22, 22, 38, 32, 0.06)
+    for i in range(20):
+        if rnd.random() < 0.8:
+            K.box(rnd.choice(['carSilver', 'tube', 'carBlue', 'carRed', 'black']), (23 + (i % 10) * 1.5, 0.45, 23.5 + (i // 10) * 5), (0.85, 0.5, 1.8), 0, 0.05)
+    for x in range(-44, 38, 9):
+        if abs(x + 0.5) > 6: K.light_pole(x + 0.5, 1.2, 5.0)
+    # East of the road, under the flight paths, only low things: scaffold and steel laydown, a stores building,
+    # folded hydraulic cranes, crane mats and a pipe-spool yard.
+    K.building(14, -24, 24, -16, 3.2, 'corrugated', 'gable', doors=2, louvres=2)
+    for i in range(12):
+        x, z = 10 + (i % 4) * 4.2, -10 + (i // 4) * 3.4
+        K.slab('concrete', (x - 1.6, 0, z - 0.6), (x + 1.6, 0.06, z + 0.6))
+        for k in range(3): K.rod(rnd.choice(['jacket', 'steel', 'rust', 'pipeGreen', 'galvanized']), (x - 1.5, 0.22 + k * 0.28, z - 0.35 + k * 0.12), (x + 1.5, 0.22 + k * 0.28, z - 0.35 + k * 0.12), 0.13, 8)
+        K.foot(x - 1.6, z - 0.6, x + 1.6, z + 0.6, 1.0)
+    for i, (x, z) in enumerate(((28, -6), (30, 2), (26, 10))):
+        K.box('safetyYellow', (x, 0.9, z), (3.6, 1.2, 1.8), 0.3 * i, 0.12)
+        K.box('black', (x, 0.35, z), (3.4, 0.7, 1.9), 0.3 * i, 0.1)
+        K.box('safetyYellow', (x - 0.4, 1.8, z), (3.8, 0.5, 0.5), 0.3 * i, 0.08)
+        K.foot(x - 2.2, z - 1.4, x + 2.2, z + 1.4, 2.1)
+    for k in range(8): K.box('timber', (34, 0.1 + k * 0.18, -16), (1.3, 0.17, 6.0), 0, 0.02)
+    K.foot(33.3, -19, 34.7, -13, 1.5)
+    for i in range(8):
+        x, z = 16 + (i % 4) * 2.6, -30 + (i // 4) * 2.2
+        for k in range(4): K.rod('galvanized', (x - 1.1, 0.12 + k * 0.1, z - 0.3 + k * 0.05), (x + 1.1, 0.12 + k * 0.1, z - 0.3 + k * 0.05), 0.05, 6)
+        K.foot(x - 1.1, z - 0.4, x + 1.1, z + 0.4, 0.5)
+
+def light_tower(K, x, z):
+    K.box('safetyYellow', (x, 0.6, z), (1.6, 0.9, 1.0), 0, 0.06)
+    K.rod('steelDark', (x, 1.0, z), (x, 6.5, z), 0.08, 6)
+    K.box('steelDark', (x, 6.5, z), (1.6, 0.12, 0.2))
+    for dx in (-0.55, 0.0, 0.55): K.box('lamp', (x + dx, 6.7, z + 0.12), (0.4, 0.3, 0.1), 0, 0, True)
+    K.foot(x - 0.8, z - 0.5, x + 0.8, z + 0.5, 6.8)
 
 def dress(P, site, rnd):
-    stats = {'people': 0, 'clutter': 0, 'stones': 0}
-    # Crews: the laydown by the burners, the camp, the lunch tent, the road shoulder, the module crane's tag lines.
-    for (u, v, n, spread) in [(-10, 4.2, 8, 2.6), (-4, 6.5, 7, 2.5), (5, 6, 7, 2.6), (11, 12, 10, 2.4), (-14, 9, 6, 2.5),
-                               (1, 11, 6, 2.2), (-20, 9, 5, 2.4), (16, 7, 5, 2.4), (-26, 4, 4, 2), (22, 4, 4, 2)]:
-        x, z = row(u, v)
+    stats = {'people': 0, 'clutter': 0}
+    for (x, z, n, spread) in ((-1, 14.5, 8, 3), (6, 18, 7, 3), (14, 11, 6, 3), (-8, 20, 6, 3), (12, 26, 8, 4),
+                              (-10, 10, 4, 2), (24, 15, 5, 3), (-20, 26, 5, 3), (2, 6.5, 4, 3)):
         stats['people'] += crew(P, site, x, z, n, spread, rnd)
-    # Clutter around the laydown and camp.
-    for (u, v, n, spread) in [(-9, 7, 10, 4), (0, 8, 12, 4.5), (8, 9, 10, 4), (-18, 11, 8, 4), (16, 12, 8, 4),
-                               (-24, 7, 6, 3), (24, 8, 6, 3), (4, 14, 8, 3.5), (-6, 15, 6, 3)]:
-        x, z = row(u, v)
+    for (x, z, n, spread) in ((4, 16, 10, 5), (-10, 24, 8, 4), (16, 18, 8, 4), (26, 10, 6, 4), (-28, 16, 6, 4), (8, 8.5, 5, 3)):
         stats['clutter'] += clutter(P, site, x, z, n, spread, rnd)
-    # Jersey barriers lining the near road shoulder.
-    for u in range(-34, 36, 3):
-        x, z = row(u + rnd.uniform(-0.3, 0.3), 2.9)
-        if site.claim(x, z, 0.9, 1.0):
-            jersey(P, T(x, 0, z, ROW_YAW))
-    # Hoses and cables from the welding rigs and compressors snaking across the pad.
-    for (u0, v0, u1, v1, paint) in [(-14.6, 4.4, -10, 1.4, 'black'), (-14.6, 6.4, -8, 3.5, 'black'), (4.6, -2.2, 9, 0.6, 'pipeGreen'),
-                                     (-2, 7.4, 3, 9.5, 'tankRed'), (12, 6, 16, 4.6, 'black')]:
-        hose(P, *row(u0, v0), *row(u1, v1), rnd, paint)
-    # Festoon lights strung over the lunch area.
-    for (a, b) in [((8.8, 11.0), (15.6, 11.2)), ((8.8, 12.8), (15.6, 13.0))]:
-        pa, pb = row(*a), row(*b)
-        if site.clear_of_paths((pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2, 3.2, 3):
-            string_lights(P, (pa[0], 2.8, pa[1]), (pb[0], 2.8, pb[1]))
-            for p in (pa, pb):
-                box(P, 'steelDark', T(p[0], 1.45, p[1]), 0.08, 2.9, 0.08)
-    # Oil stains under the cranes and trucks, puddles on the pad.
-    for _ in range(40):
-        x, z = row(rnd.uniform(-30, 30), rnd.uniform(-1, 14))
+    for (x0, z0, x1, z1, paint) in ((-8, 18, -2, 13, 'black'), (6, 20, 2, 15, 'black'), (14, 22, 18, 12, 'pipeGreen')):
+        hose(P, x0, z0, x1, z1, rnd, paint)
+    for _ in range(36):
+        x, z = rnd.uniform(-30, 30), rnd.uniform(4, 30)
         stain(P, site, x, z, rnd.uniform(0.3, 1.1), rnd, rnd.choice(['roadEdge', 'gravelDark', 'ballast']))
-    stats['stones'] = stones(P, site, 2200, rnd)
-    stats.update(dress_ground(P, site, rnd, tufts=800, flowers=160))
-    stats['deckCrew'] = dress_decks(P, site, rnd, 24)
+    stats['stones'] = stones(P, site, 2600, rnd)
+    stats.update(dress_ground(P, site, rnd, tufts=1200, flowers=220, bushes=40, skids=16))
+    stats['deckCrew'] = dress_decks(P, site, rnd, 30)
     return stats

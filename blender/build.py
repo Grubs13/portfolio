@@ -1,6 +1,6 @@
-# Rebuilds a scene in Blender from its part dump (`npm run models:dump`): every
-# part becomes a real mesh, with chamfered edges on boxes and more segments on
-# round parts, collected into one object per paint. Coordinates are three.js
+# Mesh primitives and the per-paint collector the scenes are modelled with. Each
+# paint becomes one object with one material named after it, which the site
+# reads back as that paint and its surface texture. Coordinates are three.js
 # (y up) until `C` turns them into Blender's (z up).
 import json, math, bpy, bmesh
 from mathutils import Matrix, Vector
@@ -12,10 +12,6 @@ def srgb_to_linear(c):
 
 def hex_rgb(h):
     return [((h >> s) & 255) / 255 for s in (16, 8, 0)]
-
-def three_matrix(e):
-    # three.js stores column-major.
-    return Matrix([[e[0], e[4], e[8], e[12]], [e[1], e[5], e[9], e[13]], [e[2], e[6], e[10], e[14]], [0, 0, 0, 1]])
 
 # ---- primitives in three.js local space: (verts, faces) ----
 
@@ -77,12 +73,6 @@ def prim_sphere(r, ws, hs, p0, pl, t0, tl):
             f.append((a, b, c, d))
     return v, f
 
-GABLE = (Matrix.Translation((0, 1 / 3, 0)) @ Matrix.Diagonal((1, 1 / 1.5, 1 / math.sqrt(3), 1))
-         @ Matrix.Rotation(math.pi / 2, 4, 'Y') @ Matrix.Rotation(-math.pi / 2, 4, 'X'))
-
-def col_scale(M):
-    return [Vector((M[0][i], M[1][i], M[2][i])).length for i in range(3)]
-
 class Paints:
     def __init__(self, colors):
         self.colors = colors
@@ -139,49 +129,6 @@ def material(paint, hexcolor, glow):
     m.diffuse_color = (*lin, 1)
     return m
 
-def rebuild(paints, parts):
-    """Each dumped part as a Blender mesh, chamfered where an art pixel can show it."""
-    skipped = 0
-    for part in parts:
-        t, a, M = part['t'], part['a'] or {}, three_matrix(part['m'])
-        paint, glow = part['p'], bool(part['g'])
-        s = col_scale(M)
-        if t == 'BoxGeometry':
-            w, h, d = a.get('width', 1), a.get('height', 1), a.get('depth', 1)
-            dims = sorted([w * s[0], h * s[1], d * s[2]])
-            bevel = min(0.14, dims[0] * 0.2) if dims[0] >= 0.3 else 0
-            v, f = prim_box(w, h, d)
-            paints.add(paint, glow, v, f, M, bevel)
-        elif t == 'CylinderGeometry':
-            rt, rb, h, seg = a['radiusTop'], a['radiusBottom'], a['height'], a['radialSegments']
-            if seg == 3 and rt == 1 and rb == 1 and h == 1:
-                v, f = prim_cyl(1, 1, 1, 3)
-                paints.add(paint, glow, v, f, M @ GABLE)
-                continue
-            if max(rt, rb) * max(s[0], s[2]) > 40:
-                skipped += 1
-                continue
-            r = max(rt, rb) * max(s[0], s[2])
-            if seg >= 6 and r >= 0.25:
-                seg = max(seg, min(28, round(8 + r * 9)))
-            v, f = prim_cyl(rt, rb, h, seg, a.get('openEnded', False), a.get('thetaStart', 0), a.get('thetaLength', 2 * math.pi))
-            bevel = min(0.12, r * 0.1) if r >= 0.6 and h * s[1] >= 0.4 and not a.get('openEnded') else 0
-            # Only the rims, where the cap meets the wall.
-            rim = lambda e: any(len(fc.verts) > 4 for fc in e.link_faces)
-            paints.add(paint, glow, v, f, M, bevel, rim)
-        elif t == 'IcosahedronGeometry':
-            v, f = prim_ico(a.get('radius', 1), a.get('detail', 0))
-            paints.add(paint, glow, v, f, M)
-        elif t == 'TorusGeometry':
-            v, f = prim_torus(a['radius'], a['tube'], max(6, a['radialSegments']), max(16, a['tubularSegments']), a['arc'])
-            paints.add(paint, glow, v, f, M)
-        elif t == 'SphereGeometry':
-            v, f = prim_sphere(a['radius'], max(16, a['widthSegments']), max(10, a['heightSegments']), a['phiStart'], a['phiLength'], a['thetaStart'], a['thetaLength'])
-            paints.add(paint, glow, v, f, M)
-        else:
-            raise ValueError(t)
-    return skipped
-
 def reset_scene(name):
     for ob in list(bpy.data.objects): bpy.data.objects.remove(ob)
     for me in list(bpy.data.meshes): bpy.data.meshes.remove(me)
@@ -189,9 +136,6 @@ def reset_scene(name):
     col = bpy.data.collections.new(name)
     bpy.context.scene.collection.children.link(col)
     return col
-
-def load(name):
-    with open(f'{DIR}/out/{name}.json') as fh: return json.load(fh)
 
 MESHOPT = True
 def export(path):

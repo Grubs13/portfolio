@@ -120,6 +120,20 @@ export const palette = {
   deereYellow: paint(0xf0c832),
   caseRed: paint(0xc23a2c),
 
+  // Plant finishes modelled in Blender: aluminium jacketing and its bands, fireproofing,
+  // roll-up doors, tower casing, the warehouse roof, conveyor galleries, pond edges and liner seams.
+  jacket: paint(0xc9ced4, SURFACE.shell),
+  jacketBand: paint(0xa4abb5),
+  fireproof: paint(0x9c9a92, SURFACE.concrete),
+  rollDoor: paint(0xb9bec7, SURFACE.ribbed),
+  towerCasing: paint(0x8e9a9a, SURFACE.ribbed),
+  roofWhite: paint(0xeef0f0, SURFACE.ribbed),
+  roofShade: paint(0xc8ccd0),
+  gallery: paint(0xd9866a, SURFACE.ribbed),
+  pondEdge: paint(0x8d8a74, SURFACE.gravel),
+  linerSeam: paint(0x2e3138),
+  windsock: paint(0xff6a3a),
+
   navy: paint(0x26325a),
   hiVis: paint(0xd4f03a),
   reflective: paint(0xc5ccd6),

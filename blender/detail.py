@@ -1,7 +1,6 @@
-# Set dressing modelled in Blender on top of a rebuilt scene: crews, clutter and
-# ground scatter, the density the style references get their richness from.
-# Everything is placed in three.js coordinates relative to the scene anchor.
-# Needs build.py's namespace (prim_box, prim_cyl, Paints, three_matrix).
+# Set dressing modelled in Blender: crews, clutter and ground scatter, the density
+# the style references get their richness from. Everything is placed in three.js
+# coordinates relative to the scene anchor. Needs build.py's namespace.
 import math, random
 from mathutils import Matrix, Vector, Euler
 
@@ -9,33 +8,12 @@ def T(x, y, z, yaw=0.0, s=(1, 1, 1)):
     return Matrix.Translation((x, y, z)) @ Matrix.Rotation(yaw, 4, 'Y') @ Matrix.Diagonal((*s, 1))
 
 class Site:
-    """Free ground, from the footprints of everything low already in the scene and the flight paths."""
-    def __init__(self, parts, paths, cell=0.5, radius=72):
+    """Free ground for set dressing: what the kit has placed, what covers the ground, and the flight paths."""
+    def __init__(self, paths, cell=0.5, radius=72):
         self.cell, self.radius, self.taken = cell, radius, set()
         self.ground = {}
         self.decks = []
         self.paths = [Vector(p) for p in paths]
-        for part in parts:
-            M = three_matrix(part['m'])
-            t, a = part['t'], part['a'] or {}
-            if t == 'BoxGeometry':
-                hx, hy, hz = a.get('width', 1) / 2, a.get('height', 1) / 2, a.get('depth', 1) / 2
-            elif t == 'CylinderGeometry':
-                r = max(a['radiusTop'], a['radiusBottom']); hx, hy, hz = r, a['height'] / 2, r
-            else:
-                hx = hy = hz = a.get('radius', 0.5)
-            corners = [M @ Vector((sx * hx, sy * hy, sz * hz)) for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
-            lo = Vector((min(c.x for c in corners), min(c.y for c in corners), min(c.z for c in corners)))
-            hi = Vector((max(c.x for c in corners), max(c.y for c in corners), max(c.z for c in corners)))
-            # Flat ground cover (roads, gravel, fields) is somewhere to put things, not an obstacle.
-            if hi.y - lo.y < 0.12 and lo.y < 0.2:
-                self.cover(lo, hi, part['p'])
-                continue
-            # Walkable decks up on structures, for crews.
-            if t == 'BoxGeometry' and hi.y - lo.y < 0.15 and lo.y > 1.5 and min(hi.x - lo.x, hi.z - lo.z) > 0.7:
-                self.decks.append((lo, hi))
-            if lo.y > 3 or (hi.x - lo.x) * (hi.z - lo.z) > 400: continue
-            self.mark(lo.x, lo.z, hi.x, hi.z)
 
     def cover(self, lo, hi, paint):
         if (hi.x - lo.x) * (hi.z - lo.z) > 20000: return
@@ -94,9 +72,12 @@ def hardhat(P, M, paint='hardHat'):
 
 POSES = ('stand', 'walk', 'carry', 'point', 'crouch')
 
+# Scenes at plant scale shrink people and their clutter so they sit right beside the equipment.
+SET_SCALE = 1.0
+
 def person(P, x, y, z, yaw, vest='hiVis', pose='stand', rnd=random):
-    """A site worker about 1.85 tall: boots, coveralls, vest with reflective band, arms, head and hard hat."""
-    M = T(x, y, z, yaw)
+    """A site worker about 1.85 tall at SET_SCALE 1: boots, coveralls, vest with reflective band, arms, head and hard hat."""
+    M = T(x, y, z, yaw, (SET_SCALE,) * 3)
     crouch = pose == 'crouch'
     hip = 0.55 if crouch else 0.85
     stride = 0.16 if pose == 'walk' else 0.0
@@ -133,7 +114,7 @@ def crew(P, site, cx, cz, n, spread, rnd, vests=('hiVis', 'hiVis', 'tankOrange')
     for _ in range(n * 12):
         if placed >= n: break
         x, z = cx + rnd.uniform(-spread, spread), cz + rnd.uniform(-spread, spread)
-        if not site.claim(x, z, 0.35, 2.0): continue
+        if not site.claim(x, z, 0.35 * SET_SCALE, 2.0 * SET_SCALE): continue
         yaw = face if face is not None else rnd.uniform(-math.pi, math.pi)
         person(P, x, 0, z, yaw + rnd.uniform(-0.6, 0.6), rnd.choice(vests), rnd.choice(POSES), rnd)
         placed += 1
@@ -271,9 +252,10 @@ def clutter(P, site, cx, cz, n, spread, rnd, kinds=None):
     for _ in range(n * 15):
         if placed >= n: break
         fn, half, top = rnd.choice(kinds)
+        half, top = half * SET_SCALE, top * SET_SCALE
         x, z = cx + rnd.uniform(-spread, spread), cz + rnd.uniform(-spread, spread)
         if not site.claim(x, z, half, top): continue
-        M = T(x, 0, z, rnd.uniform(-math.pi, math.pi))
+        M = T(x, 0, z, rnd.uniform(-math.pi, math.pi), (SET_SCALE,) * 3)
         fn(P, M) if fn in (pallet, bottle_cage, cable_reel, jersey, wheelbarrow) else fn(P, M, rnd)
         placed += 1
     return placed
@@ -337,13 +319,13 @@ def dress_ground(P, site, rnd, tufts=1500, flowers=300, bushes=60, skids=20):
     for _ in range(bushes * 5):
         if stats['bushes'] >= bushes: break
         x, z = rnd.uniform(-72, 72), rnd.uniform(-72, 72)
-        if site.surface(x, z) in GRASS and site.claim(x, z, 0.8, 1.2):
+        if site.surface(x, z) in GRASS and site.claim(x, z, 0.8 * SET_SCALE, 1.2):
             bush(P, x, z, rnd); stats['bushes'] += 1
     for _ in range(skids * 40):
         if stats['skids'] >= skids: break
         x, z = rnd.uniform(-50, 50), rnd.uniform(-50, 50)
-        if site.surface(x, z) in GRAVEL and site.near_taken(x, z, 3) and site.claim(x, z, 1.0, 1.4):
-            (pump_skid if rnd.random() < 0.6 else valve_station)(P, T(x, 0.04, z, rnd.choice([0, math.pi / 2]) + rnd.uniform(-0.05, 0.05)), rnd)
+        if site.surface(x, z) in GRAVEL and site.near_taken(x, z, 3) and site.claim(x, z, SET_SCALE, 1.4 * SET_SCALE):
+            (pump_skid if rnd.random() < 0.6 else valve_station)(P, T(x, 0.04, z, rnd.choice([0, math.pi / 2]) + rnd.uniform(-0.05, 0.05), (SET_SCALE,) * 3), rnd)
             stats['skids'] += 1
     return stats
 
