@@ -21,6 +21,8 @@ export interface SceneModel {
 export const SCENE_MODELS: Readonly<Partial<Record<string, SceneModel>>> = {
   'ammonia-operations-engineer': { url: '/models/carseland.glb', look: [-5, 6, -8] },
   'reformer-reharp': { url: '/models/reformer-reharp.glb', look: [-4, 6.5, -10] },
+  // Calen kneels at the open flange face in front of him, seen from behind at three-quarters.
+  'reliability-engineer': { url: '/models/reliability.glb', look: [-0.9, 1.4, 0.25], cast: { pose: 'inspect', yaw: -1.3 } },
 };
 
 /** The pixel texture of the palette paint a Blender material is named after, as `paint_<name>`. */

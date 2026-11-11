@@ -703,3 +703,347 @@ def crawler_crane(K, x, z, tip, hook_y, s=1.0, paint='safetyYellow'):
 
 def slings(K, hook, points, paint='black'):
     for p in points: K.rod(paint, hook, p, 0.035, 4)
+
+def light_tower(K, x, z):
+    """A diesel light tower: the yellow generator skid, a mast and a bar of three glowing lamps."""
+    K.box('safetyYellow', (x, 0.6, z), (1.6, 0.9, 1.0), 0, 0.06)
+    K.rod('steelDark', (x, 1.0, z), (x, 6.5, z), 0.08, 6)
+    K.box('steelDark', (x, 6.5, z), (1.6, 0.12, 0.2))
+    for dx in (-0.55, 0.0, 0.55): K.box('lamp', (x + dx, 6.7, z + 0.12), (0.4, 0.3, 0.1), 0, 0, True)
+    K.foot(x - 0.8, z - 0.5, x + 0.8, z + 0.5, 6.8)
+
+# ---- turnaround: shell-and-tube exchangers opened up for inspection ----
+# These take a horizontal unit `axis` and build across it with `side`, the axis
+# turned a quarter to its left, so a piece can lie at any heading.
+
+def side_of(axis):
+    return Vector((axis.z, 0, -axis.x))
+
+def yaw_of(axis):
+    """The `yaw` that lays a box's local x along `axis`."""
+    return math.atan2(-axis.z, axis.x)
+
+def cap(K, paint, c, axis, r, depth, seg=20):
+    """A dished head on the end of a shell at `c`, bulging `depth` along `axis`."""
+    v, f = prim_sphere(1, seg, 5, 0, 2 * math.pi, 0, math.pi / 2)
+    rot = UP.rotation_difference(axis).to_matrix().to_4x4()
+    K.P.add(paint, False, v, f, Matrix.Translation(c) @ rot @ Matrix.Diagonal((r, depth, r, 1)))
+
+def bolt_circle(c, axis, r, n):
+    side = side_of(axis)
+    return [c + side * (r * math.cos(2 * math.pi * (k + 0.5) / n)) + UP * (r * math.sin(2 * math.pi * (k + 0.5) / n)) for k in range(n)]
+
+def tube_ends(K, c, out, r, pitch, paint='steelDark'):
+    """The tube ends in a tubesheet face at `c` facing `out`: bores on a triangular pitch inside
+    radius `r`, with the unpiped pass-partition lane across the middle."""
+    side = side_of(-out)
+    rows = int(r / (pitch * 0.866))
+    for j in range(-rows, rows + 1):
+        y = j * pitch * 0.866
+        if abs(y) < pitch * 0.7: continue
+        for i in range(-int(r / pitch) - 1, int(r / pitch) + 2):
+            x = (i + 0.5 * (j % 2)) * pitch
+            if math.hypot(x, y) > r: continue
+            p = c + side * x + UP * y
+            K.rod(paint, p, p + out * 0.012, pitch * 0.3, 6)
+
+def flange_face(K, c, axis, r, t, holes=28, pitch=0.062):
+    """An exchanger's channel-end flange with the channel head off, seen face on: the shell
+    flange with its bolt-hole circle and the studs out, the machined gasket seat of the raised
+    face with its groove, and the tubesheet inside it, packed with tube ends either side of the
+    pass-partition lane. `c` is the centre of the face and `axis` points from it into the shell."""
+    out = -axis
+    r_seat, r_sheet = r * 0.8, r * 0.64
+    K.rod('steel', c, c + axis * t, r, 32)
+    K.rod('galvanized', c + out * 0.01, c, r * 0.97, 32)
+    K.rod('stainless', c + out * 0.025, c + out * 0.01, r_seat, 32)
+    K.rod('steelDark', c + out * 0.035, c + out * 0.025, r_sheet + 0.035, 32)
+    K.rod('rustLight', c + out * 0.05, c + out * 0.035, r_sheet, 32)
+    side = side_of(axis)
+    K.rod('steelDark', c + out * 0.052 - side * r_sheet * 0.96, c + out * 0.052 + side * r_sheet * 0.96, 0.02, 4)
+    for p in bolt_circle(c, axis, (r_seat + r) / 2, holes):
+        K.rod('black', p + out * 0.01, p + out * 0.02, (r - r_seat) * 0.3, 8)
+    tube_ends(K, c + out * 0.05, out, r_sheet * 0.92, pitch)
+
+def studs(K, c, axis, r, n, grip):
+    """Studs through a bolted flange pair centred on `c`, `grip` thick, a nut on each end."""
+    for p in bolt_circle(c, axis, r, n):
+        K.rod('galvanized', p - axis * (grip / 2 + 0.09), p + axis * (grip / 2 + 0.09), 0.022, 4)
+        for s in (-1, 1):
+            K.rod('steelDark', p + axis * (s * grip / 2), p + axis * (s * (grip / 2 + 0.06)), 0.045, 6)
+
+def blind(K, top, up, r, tag=True):
+    """A blind plate on a nozzle flange facing `up`, with the yellow spectacle handle and a red lock-out tag on a wire."""
+    K.rod('steelDark', top, top + up * 0.05, r, 14)
+    across = side_of(up) if abs(up.y) < 0.5 else Vector((1, 0, 0))
+    h = top + up * 0.025 + across * r
+    K.rod('safetyYellow', h, h + across * 0.22, 0.035, 4)
+    if tag:
+        end = h + across * 0.22
+        K.rod('black', end, end - UP * 0.12, 0.008, 3)
+        K.box('tankRed', tuple(end - UP * 0.24), (0.16, 0.22, 0.02), yaw_of(across))
+        K.box('tube', tuple(end - UP * 0.22 + side_of(across) * 0.012), (0.12, 0.06, 0.01), yaw_of(across))
+
+def nozzle(K, base, up, r, length, blinded=False, tag=False):
+    """A flanged nozzle standing `length` off a shell along `up`; returns its flange face."""
+    K.rod('steel', base, base + up * length, r, 12)
+    K.rod('steel', base + up * length, base + up * (length + 0.07), r * 1.55, 16)
+    top = base + up * (length + 0.07)
+    if blinded: blind(K, top, up, r * 1.55, tag)
+    return top
+
+def shell_exchanger(K, c, axis, length, r, t, state='bolted', base=0.0, piping=None):
+    """A shell-and-tube exchanger on concrete saddles: the jacketed shell with banded seams, a body
+    flange each end, a dished shell cover and flanged shell-side nozzles. `c` is the centre of the
+    channel-end flange face and `axis` points from it along the shell. `state` is how the channel
+    end stands in the turnaround: 'open' with the channel head off (see `flange_face`), 'bolted'
+    with its channel, studs and nozzles on, or 'blinded', bolted with its nozzles blinded and tagged.
+    `base` is the height the saddles stand on, so one exchanger can sit on another, and `piping`
+    runs the shell nozzles up to that height for a rack."""
+    side = side_of(axis)
+    rs = r * 0.76
+    K.rod('jacket', c + axis * t, c + axis * (length - t), rs, 24)
+    for k in range(1, int(length / 1.1)):
+        q = c + axis * (length * k / int(length / 1.1))
+        K.rod('jacketBand', q - axis * 0.03, q + axis * 0.03, rs + 0.012, 24)
+    K.rod('steel', c, c + axis * t, r, 32)
+    K.rod('steel', c + axis * (length - t), c + axis * length, r * 0.95, 28)
+    cap(K, 'steel', c + axis * length, axis, r * 0.8, r * 0.4)
+    for f in (0.22, 0.8):
+        q = c + axis * (length * f)
+        h = q.y - rs * 0.5 - base
+        K.box('concrete' if base == 0 else 'steelDark', (q.x, base + h / 2, q.z), (0.6, h, rs * 2.0), yaw_of(axis), 0.02)
+        K.box('steelDark', (q.x, q.y - rs * 0.62, q.z), (0.36, 0.2, rs * 1.8), yaw_of(axis))
+    for f in (0.18, 0.84):
+        top = nozzle(K, c + axis * (length * f) + UP * (rs - 0.05), UP, r * 0.18, 0.34, state == 'blinded', f < 0.5)
+        if piping:
+            K.rod('jacket' if f < 0.5 else 'steel', top, Vector((top.x, piping, top.z)), r * 0.18, 10)
+    if state == 'open':
+        flange_face(K, c, axis, r, t)
+        front = c
+    else:
+        barrel = r * 1.1
+        K.rod('steel', c - axis * t, c, r, 32)
+        K.rod('steel', c - axis * (t + barrel), c - axis * t, rs, 24)
+        K.rod('steel', c - axis * (2 * t + barrel), c - axis * (t + barrel), r, 32)
+        K.rod('steel', c - axis * (3 * t + barrel), c - axis * (2 * t + barrel), r, 32)
+        studs(K, c, axis, (r * 0.8 + r) / 2, 20, 2 * t)
+        studs(K, c - axis * (2 * t + barrel), axis, (r * 0.8 + r) / 2, 20, 2 * t)
+        mid = c - axis * (t + barrel / 2)
+        nozzle(K, mid + UP * (rs - 0.05), UP, r * 0.2, 0.3, state == 'blinded', True)
+        nozzle(K, mid + side * (rs - 0.05) - UP * rs * 0.3, side, r * 0.2, 0.3, state == 'blinded', True)
+        front = c - axis * (3 * t + barrel)
+    ends = [front, c + axis * (length + r * 0.4)]
+    K.foot(min(p.x for p in ends) - r, min(p.z for p in ends) - r, max(p.x for p in ends) + r, max(p.z for p in ends) + r, c.y + r)
+
+def pulled_bundle(K, a, b, r, pitch=0.062):
+    """A tube bundle pulled from its shell and lying from `a` to `b`: rust-fouled tubes between the
+    stationary tubesheet at `a`, with its tube ends and pulling eyes, and the floating head at `b`,
+    caged by baffles."""
+    axis = (b - a).normalized()
+    side = side_of(axis)
+    L = (b - a).length
+    K.rod('rust', a + axis * 0.12, b - axis * 0.12, r * 0.92, 20)
+    for k in range(22):
+        w = 2 * math.pi * k / 22
+        off = side * (math.cos(w) * r * 0.92) + UP * (math.sin(w) * r * 0.92)
+        K.rod('rustLight' if k % 3 else 'rustDark', a + axis * 0.12 + off, b - axis * 0.12 + off, 0.03, 5)
+    for k in range(1, 8):
+        q = a + axis * (L * k / 8)
+        K.rod('steel', q - axis * 0.02, q + axis * 0.02, r, 20)
+    K.rod('steel', a, a + axis * 0.12, r * 1.12, 28)
+    tube_ends(K, a, -axis, r * 0.86, pitch, 'rustDark')
+    for s in (-1, 1):
+        e = a + side * (s * r * 0.45) + UP * (r * 0.5)
+        K.rod('steelDark', e, e - axis * 0.12, 0.05, 6)
+    K.rod('steel', b - axis * 0.12, b, r, 24)
+    cap(K, 'steel', b, axis, r * 0.82, r * 0.35)
+
+def bundle_extractor(K, a, b, h, w):
+    """A bundle extractor on the ground from `a` to `b`: a yellow box-beam cradle on skids with
+    rollers across it at height `h`, a pulling head with twin hydraulic rams at `a`, and its power pack."""
+    axis = (b - a).normalized()
+    side = side_of(axis)
+    a, b = Vector((a.x, 0, a.z)), Vector((b.x, 0, b.z))
+    L = (b - a).length
+    for s in (-1, 1):
+        o = side * (s * w / 2)
+        K.beam('safetyYellow', a + o + UP * (h - 0.14), b + o + UP * (h - 0.14), 0.24)
+        K.beam('steelDark', a + o + UP * 0.08, b + o + UP * 0.08, 0.16)
+        for k in range(int(L / 1.4) + 1):
+            q = a + axis * (k * L / int(L / 1.4)) + o
+            K.beam('safetyYellow', q + UP * 0.08, q + UP * (h - 0.14), 0.14)
+    for k in range(int(L / 0.9) + 1):
+        q = a + axis * (k * L / int(L / 0.9))
+        K.rod('black', q - side * (w / 2) + UP * (h - 0.02), q + side * (w / 2) + UP * (h - 0.02), 0.07, 6)
+    for s in (-1, 1):
+        K.beam('safetyYellow', a + side * (s * w / 2), a + side * (s * w / 2) + UP * (h + 1.4), 0.2)
+    K.beam('safetyYellow', a - side * (w / 2) + UP * (h + 1.4), a + side * (w / 2) + UP * (h + 1.4), 0.2)
+    for s in (-1, 1):
+        p = a + side * (s * w * 0.3) + UP * (h + 0.7)
+        K.rod('safetyYellow', p, p + axis * 1.0, 0.1, 10)
+        K.rod('stainless', p + axis * 1.0, p + axis * 1.6, 0.05, 8)
+    pp = a - axis * 1.2 + side * (w / 2 + 0.7)
+    K.box('safetyYellow', (pp.x, 0.45, pp.z), (1.2, 0.9, 0.8), yaw_of(axis), 0.05)
+    K.box('steelDark', (pp.x, 0.95, pp.z), (0.6, 0.12, 0.5), yaw_of(axis))
+    ends = [a - side * w - axis * 2, b + side * w]
+    K.foot(min(p.x for p in ends), min(p.z for p in ends), max(p.x for p in ends), max(p.z for p in ends), h + 1.5)
+
+def channel_head(K, c, axis, r, t):
+    """The channel head lifted off an exchanger and lying on its side on timber: the barrel between
+    its two flanges, the open end showing the pass-partition plate across the dark inside, the
+    tube-side nozzles, and the studs from that flange laid beside."""
+    side = side_of(axis)
+    rs, barrel = r * 0.76, r * 1.1
+    K.rod('steel', c, c + axis * t, r, 32)
+    K.rod('steel', c + axis * t, c + axis * (t + barrel), rs, 24)
+    K.rod('steel', c + axis * (t + barrel), c + axis * (3 * t + barrel), r, 32)
+    K.rod('stainless', c - axis * 0.02, c, r * 0.8, 32)
+    K.rod('rustDark', c - axis * 0.03, c - axis * 0.02, r * 0.7, 28)
+    K.rod('steel', c - axis * 0.04 - UP * r * 0.7, c - axis * 0.04 + UP * r * 0.7, 0.03, 4)
+    for p in bolt_circle(c, axis, r * 0.9, 20):
+        K.rod('black', p - axis * 0.03, p - axis * 0.02, r * 0.06, 6)
+    mid = c + axis * (t + barrel / 2)
+    for d in (side, UP):
+        nozzle(K, mid + d * (rs - 0.05), d, r * 0.2, 0.3)
+    for k in (0.2, 0.8):
+        q = c + axis * ((3 * t + barrel) * k)
+        K.box('timber', (q.x, 0.1, q.z), (0.3, 0.2, r * 2.2), yaw_of(axis), 0.02)
+        for s in (-1, 1):
+            p = q + side * (s * rs * 0.8)
+            K.box('timber', (p.x, 0.25, p.z), (0.25, 0.16, 0.25), yaw_of(axis))
+    ends = [c - side * r, c + axis * (3 * t + barrel) + side * r]
+    K.foot(min(p.x for p in ends) - 0.3, min(p.z for p in ends) - 0.3, max(p.x for p in ends) + 0.3, max(p.z for p in ends) + 0.3, 2 * r)
+
+def stud_rack(K, c, yaw, rows=4, per_row=12, length=0.75):
+    """A stud and nut rack: a steel stand with the flange studs off the job laid across its bars in
+    rows, two nuts run onto each one, and a bucket of spare nuts beside."""
+    ax, az = Vector((math.cos(yaw), 0, -math.sin(yaw))), Vector((math.sin(yaw), 0, math.cos(yaw)))
+    c = Vector(c)
+    span = per_row * 0.12
+    for s in (-1, 1):
+        for e in (-1, 1):
+            foot = c + ax * (s * span / 2) + az * (e * length * 0.3)
+            K.beam('steelDark', foot, foot + UP * 0.9, 0.06)
+        top = c + ax * (s * span / 2)
+        K.beam('steelDark', top + UP * 0.2 - az * length * 0.3, top + UP * 0.2 + az * length * 0.3, 0.05)
+    for row in range(rows):
+        y = 0.35 + row * 0.16
+        for e in (-1, 1):
+            K.beam('steelDark', c + az * (e * length * 0.3) - ax * span / 2 + UP * y, c + az * (e * length * 0.3) + ax * span / 2 + UP * y, 0.04)
+        for k in range(per_row):
+            p = c + ax * (-span / 2 + (k + 0.5) * span / per_row) + UP * (y + 0.04)
+            K.rod('galvanized', p - az * length / 2, p + az * length / 2, 0.022, 4)
+            for e in (-1, 1): K.rod('steelDark', p + az * (e * length * 0.38), p + az * (e * length * 0.46), 0.042, 6)
+    b = c + ax * (span / 2 + 0.45)
+    K.cyl('tankOrange', (b.x, 0, b.z), 0.2, 0.42, 10)
+    K.cyl('steelDark', (b.x, 0.42, b.z), 0.18, 0.03, 10)
+    K.foot(c.x - span, c.z - span, c.x + span, c.z + span, 1.0)
+
+def gasket_pack(K, c, yaw, r):
+    """A new spiral-wound gasket in its packaging on a pallet: the ring unwrapped on its cardboard
+    sheet, the steel winding inside its yellow centring ring, and a second one still boxed."""
+    x, y, z = c
+    K.box('timber', (x, y + 0.06, z), (2 * r + 0.3, 0.12, 2 * r + 0.3), yaw, 0.02)
+    K.box('plank', (x, y + 0.14, z), (2 * r + 0.2, 0.04, 2 * r + 0.2), yaw, 0.01)
+    for paint, R, tube in (('safetyYellow', r * 0.92, 0.05), ('stainless', r * 0.8, 0.035)):
+        v, f = prim_torus(R, tube, 6, 28, 2 * math.pi)
+        K.P.add(paint, False, v, f, T(x, y + 0.18, z, yaw) @ Matrix.Rotation(math.pi / 2, 4, 'X') @ Matrix.Diagonal((1, 1, 0.5, 1)))
+    ax, az = Vector((math.cos(yaw), 0, -math.sin(yaw))), Vector((math.sin(yaw), 0, math.cos(yaw)))
+    q = Vector(c) + az * (2 * r + 0.5)
+    K.box('plank', (q.x, y + 0.12, q.z), (2 * r + 0.25, 0.22, 2 * r + 0.25), yaw, 0.02)
+    K.box('tube', (q.x, y + 0.235, q.z) , (0.5, 0.01, 0.3), yaw)
+    K.foot(x - 2 * r, z - 2 * r, x + 2 * r, z + 2 * r, 0.4, 0.6)
+
+def scaffold(K, origin, yaw, bays, depth, lifts, deck_lifts=None):
+    """A tube-and-clamp scaffold standing on sole boards from `origin`: galvanized standards every
+    2 units along and `depth` across, ledgers and transoms at each 2-unit lift, face braces, plank
+    decks with toe boards at the working lifts, a ladder up the end, and its green scaff tag."""
+    ax, az = Vector((math.cos(yaw), 0, -math.sin(yaw))), Vector((math.sin(yaw), 0, math.cos(yaw)))
+    o = Vector(origin)
+    H = lifts * 2.0
+    L = bays * 2.0
+    deck_lifts = deck_lifts or [lifts]
+    for i in range(bays + 1):
+        for j in (0, 1):
+            p = o + ax * (i * 2.0) + az * (j * depth)
+            K.rod('galvanized', p, p + UP * (H + 1.0), 0.03, 4)
+            K.box('timber', (p.x, 0.04, p.z), (0.25, 0.06, 0.25), yaw)
+    for k in range(1, lifts + 1):
+        y = k * 2.0
+        for j in (0, 1):
+            K.rod('galvanized', o + az * (j * depth) + UP * y, o + ax * L + az * (j * depth) + UP * y, 0.026, 4)
+        for i in range(bays + 1):
+            K.rod('galvanized', o + ax * (i * 2.0) + UP * y, o + ax * (i * 2.0) + az * depth + UP * y, 0.026, 4)
+        for i in range(bays):
+            a, b = o + ax * (i * 2.0) + UP * (y - 2.0), o + ax * ((i + 1) * 2.0) + UP * y
+            K.rod('galvanized', a if i % 2 else b - UP * 2.0, b if i % 2 else a + UP * 2.0, 0.022, 4)
+    for k in deck_lifts:
+        y = k * 2.0
+        for i in range(bays):
+            c = o + ax * (i * 2.0 + 1.0) + az * (depth / 2) + UP * (y + 0.04)
+            K.box('plank', tuple(c), (1.96, 0.06, depth - 0.05), yaw)
+        for j in (0, 1):
+            c = o + ax * (L / 2) + az * (j * depth) + UP * (y + 0.15)
+            K.box('plank', tuple(c), (L, 0.18, 0.03), yaw)
+            K.rod('galvanized', o + az * (j * depth) + UP * (y + 1.0), o + ax * L + az * (j * depth) + UP * (y + 1.0), 0.026, 4)
+    lad = o - ax * 0.35 + az * (depth / 2)
+    for s in (-0.2, 0.2):
+        K.rod('galvanized', lad + az * s, lad + az * s + UP * (H + 1.0), 0.025, 4)
+    for k in range(int(H / 0.3)):
+        K.rod('galvanized', lad - az * 0.2 + UP * (k * 0.3 + 0.3), lad + az * 0.2 + UP * (k * 0.3 + 0.3), 0.015, 3)
+    tag = lad + UP * 1.6 - ax * 0.03
+    K.box('signGreen', tuple(tag), (0.02, 0.3, 0.22), yaw)
+    ends = [o - ax * 0.6, o + ax * L + az * depth]
+    K.foot(min(p.x for p in ends), min(p.z for p in ends), max(p.x for p in ends), max(p.z for p in ends), H + 1.0)
+
+def hydraulic_crane(K, c, yaw, tip, hook_y, s=1.0):
+    """A hydraulic truck crane rigged over the laydown: an eight-wheeled carrier with its cab,
+    outriggers out on timber pads, the turret with its operator's cab, and a telescopic boom in
+    nested sections up to the sheave head, with the hook block on its falls. Returns the hook."""
+    ax, az = Vector((math.cos(yaw), 0, -math.sin(yaw))), Vector((math.sin(yaw), 0, math.cos(yaw)))
+    c, tip = Vector(c), Vector(tip)
+    def at(f, y, side): return c + ax * (f * s) + az * (side * s) + UP * (y * s)
+    deck = at(0, 1.35, 0)
+    K.box('safetyYellow', tuple(deck), (10.5 * s, 0.7 * s, 2.5 * s), yaw, 0.06 * s)
+    for f in (-3.6, -2.3, 2.0, 3.3):
+        for side in (-1.05, 1.05):
+            w = at(f, 0.55, side)
+            K.rod('black', w - az * 0.22 * s, w + az * 0.22 * s, 0.55 * s, 12)
+    cab = at(4.6, 2.1, -0.5)
+    K.box('safetyYellow', tuple(cab), (1.4 * s, 1.5 * s, 1.3 * s), yaw, 0.08 * s)
+    K.box('window', tuple(at(5.31, 2.35, -0.5)), (0.04 * s, 0.7 * s, 1.1 * s), yaw)
+    for f in (-4.2, 3.6):
+        for side in (-1, 1):
+            p = at(f, 1.0, side * 1.3)
+            q = at(f, 0.25, side * 3.4)
+            K.beam('steelDark', p, Vector((q.x, p.y, q.z)), 0.3 * s)
+            K.beam('steelDark', Vector((q.x, p.y, q.z)), q, 0.22 * s)
+            K.box('timber', (q.x, 0.08 * s, q.z), (1.0 * s, 0.16 * s, 1.0 * s), yaw)
+    turret = at(-1.6, 2.0, 0)
+    K.cyl('steelDark', (turret.x, turret.y - 0.25 * s, turret.z), 1.1 * s, 0.25 * s, 16)
+    d = Vector((tip.x - turret.x, 0, tip.z - turret.z)).normalized()
+    dside = side_of(d)
+    K.box('safetyYellow', tuple(turret + UP * 0.5 * s - d * 0.8 * s), (3.4 * s, 1.1 * s, 2.3 * s), yaw_of(d), 0.08 * s)
+    K.box('black', tuple(turret + UP * 0.6 * s - d * 2.6 * s), (1.0 * s, 1.2 * s, 2.2 * s), yaw_of(d), 0.05 * s)
+    ocab = turret + UP * 0.9 * s + dside * 1.4 * s
+    K.box('safetyYellow', tuple(ocab), (1.6 * s, 1.4 * s, 0.9 * s), yaw_of(d), 0.06 * s)
+    K.box('window', tuple(ocab + d * 0.81 * s), (0.03 * s, 0.8 * s, 0.7 * s), yaw_of(d))
+    foot = turret + UP * 1.0 * s + d * 0.4 * s
+    boom = tip - foot
+    sections = 4
+    for k in range(sections):
+        a = foot + boom * (k / sections * 0.92)
+        b = foot + boom * ((k + 1) / sections) if k == sections - 1 else foot + boom * ((k + 1.15) / sections)
+        K.beam('safetyYellow' if k % 2 == 0 else 'deereYellow', a, b, (0.9 - 0.15 * k) * s)
+    lift = foot + boom * 0.22
+    K.beam('steelDark', turret + UP * 0.6 * s + d * 0.8 * s, lift, 0.35 * s)
+    K.box('safetyYellow', tuple(tip), (0.9 * s, 0.8 * s, 0.6 * s), yaw_of(d), 0.05 * s)
+    hb = Vector((tip.x, hook_y + 0.5 * s, tip.z))
+    for k in (-0.12, 0.12):
+        K.rod('black', tip + dside * k * s, hb + dside * k * s, 0.025 * s, 4)
+    K.box('safetyYellow', tuple(hb), (0.5 * s, 0.8 * s, 0.4 * s), yaw_of(d), 0.05 * s)
+    hook = hb - UP * 0.7 * s
+    K.rod('steelDark', hb, hook, 0.06 * s, 6)
+    K.foot(c.x - 6 * s, c.z - 6 * s, c.x + 6 * s, c.z + 6 * s, 4 * s)
+    return hook

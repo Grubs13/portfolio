@@ -10,6 +10,7 @@ The scenes and the character are modelled in Blender by these scripts and loaded
    DIR = '/path/to/portfolio/blender'
    exec(open(f'{DIR}/run.py').read(), {'DIR': DIR, 'SCENE': 'carseland'})
    exec(open(f'{DIR}/run.py').read(), {'DIR': DIR, 'SCENE': 'reformer'})
+   exec(open(f'{DIR}/run.py').read(), {'DIR': DIR, 'SCENE': 'reliability'})
    exec(open(f'{DIR}/character.py').read(), {'DIR': DIR})
    ```
 3. Run `npm run models:pack`. It compresses `out/*.glb` into `public/models/` with gltfpack at 16-bit positions, so thin ground layers keep their order.
@@ -18,10 +19,14 @@ The scenes and the character are modelled in Blender by these scripts and loaded
 ## Files
 
 - `build.py`: mesh primitives and the per-paint collector. Each paint becomes one object with a material named `paint_<name>`. The site reads that name back as the palette paint and its surface texture (`SURFACE` in `src/world/art/palette.ts`).
-- `plantkit.py`: plant equipment and site furniture, including the parametric Kellogg reformer and the crawler crane.
+- `plantkit.py`: plant equipment and site furniture, including the parametric Kellogg reformer, the crawler and hydraulic cranes, and the turnaround exchanger pieces: an exchanger open, bolted or blinded, its flange face and tubesheet, the pulled bundle on its extractor, the channel head, a stud rack, gaskets and scaffold.
 - `detail.py`: crews, clutter, pebbles, grass and the `Site` that keeps them clear of placed equipment.
-- `carseland.py` and `reformer.py`: the two scene layouts.
+- `carseland.py`, `reformer.py` and `reliability.py`: the scene layouts. `reliability.py` is laid out round Calen kneeling at an open exchanger flange, at 0.9 units per metre with `SET_SCALE` 1.6 so the crews match him. Its `YAW` must match the `cast` yaw for `reliability-engineer` in `src/world/art/sceneModel.ts`.
 - `character.py`: Calen, a Skin-modifier body with modelled head, hands, boots and gear.
+
+## Character poses
+
+`POSES` in `character.py` names each pose by the joints it turns, as Euler angles in radians. Forward kinematics down `BONES` gives each joint a rigid transform. The skin body is rebuilt from the posed joints and painted where each face sat at rest, so the hi-vis bands stay put. Every other part rides one joint and moves with it. Each pose is exported under an empty named `pose_<name>` in one `out/calen.glb`, and `stand` is the rest pose. The site shows one pose at a time: a stage's `cast` names the pose and the yaw (`src/world/art/kit.ts`), and the loader sizes Calen by `pose_stand`. To add a pose, add it to `POSES` and to `CHARACTER_POSES` in `src/world/art/character.ts`.
 
 ## Design notes
 
