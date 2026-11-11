@@ -146,6 +146,12 @@ export const palette = {
   lens: paint(0x9db9dc),
   undershirt: paint(0xcdbb9c),
   boots: paint(0xa97c4e),
+  // The engineering office: carpet tiles, painted walls, a laminate desk, and monitor screens that glow.
+  carpet: paint(0x596075, SURFACE.concrete),
+  officeWall: paint(0xd8d2c3),
+  laminate: paint(0xb89a74),
+  screen: glow(0x9fd6ff),
+  screenDark: glow(0x1d3a5c),
   // Site workers' coveralls and work gloves.
   khaki: paint(0xb89e6e),
   frRed: paint(0xb8432f),

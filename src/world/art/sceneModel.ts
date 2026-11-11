@@ -25,6 +25,8 @@ export const SCENE_MODELS: Readonly<Partial<Record<string, SceneModel>>> = {
   'reformer-reharp': { url: '/models/reformer-reharp.glb', look: [-4, 6.5, -10] },
   // Calen kneels at the open flange face in front of him, seen from behind at three-quarters.
   'reliability-engineer': { url: '/models/reliability.glb', look: [-0.9, 1.4, 0.25], cast: { pose: 'inspect', yaw: -1.3 }, frame: 11 },
+  // Calen at his desk in the site engineering office, facing his monitors.
+  'technical-interests': { url: '/models/office.glb', look: [-1.0, 1.6, -0.2], cast: { pose: 'sit', yaw: -Math.PI / 2 }, frame: 12 },
 };
 
 /** The pixel texture of the palette paint a Blender material is named after, as `paint_<name>`. */

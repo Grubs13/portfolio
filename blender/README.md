@@ -11,6 +11,7 @@ The scenes and the character are modelled in Blender by these scripts and loaded
    exec(open(f'{DIR}/run.py').read(), {'DIR': DIR, 'SCENE': 'carseland'})
    exec(open(f'{DIR}/run.py').read(), {'DIR': DIR, 'SCENE': 'reformer'})
    exec(open(f'{DIR}/run.py').read(), {'DIR': DIR, 'SCENE': 'reliability'})
+   exec(open(f'{DIR}/run.py').read(), {'DIR': DIR, 'SCENE': 'office'})
    exec(open(f'{DIR}/character.py').read(), {'DIR': DIR})
    ```
 3. Run `npm run models:pack`. It compresses `out/*.glb` into `public/models/` with gltfpack at 16-bit positions, so thin ground layers keep their order.
@@ -22,12 +23,12 @@ The scenes and the character are modelled in Blender by these scripts and loaded
 - `plantkit.py`: plant equipment and site furniture, including the parametric Kellogg reformer, the crawler and hydraulic cranes, and the turnaround exchanger pieces: an exchanger open, bolted or blinded, its flange face and tubesheet, the pulled bundle on its extractor, the channel head, a stud rack, gaskets and scaffold.
 - `figure.py`: the figure Calen and the workers share. It holds the stick skeleton (`JOINTS`, `BONES`), forward kinematics for a pose, the Skin-modifier body painted by rest position, and `rider`, which carries a part on a joint.
 - `detail.py`: crews, clutter, pebbles, grass and the `Site` that keeps them clear of placed equipment.
-- `carseland.py`, `reformer.py` and `reliability.py`: the scene layouts. `reliability.py` is laid out round Calen kneeling at an open exchanger flange, at 0.9 units per metre with `SET_SCALE` 1.6 so the crews match him. Its `YAW` must match the `cast` yaw for `reliability-engineer` in `src/world/art/sceneModel.ts`.
+- `carseland.py`, `reformer.py`, `reliability.py` and `office.py`: the scene layouts. `reliability.py` is laid out round Calen kneeling at an open exchanger flange, at 0.9 units per metre with `SET_SCALE` 1.6 so the crews match him. Its `YAW` must match the `cast` yaw for `reliability-engineer` in `src/world/art/sceneModel.ts`. `office.py` is the Technical Interests scene. It is a cutaway site office (desk with two monitors, binder shelves, filing cabinets, a whiteboard and a meeting table) with the plant around it, laid out round Calen in the `sit` pose at the desk. Its `YAW` matches the `cast` yaw for `technical-interests`.
 - `character.py`: Calen, built like the workers at their proportions (`figure.py`'s body lightly smoothed so it keeps crisp facets, painted boots, mitten hands), with his own head, hat, glasses and gear. The site shades him with the faceted scene shader.
 
 ## Character poses
 
-`POSES` in `character.py` names each pose by the joints it turns, as Euler angles in radians. Forward kinematics down `BONES` gives each joint a rigid transform. The skin body is rebuilt from the posed joints and painted where each face sat at rest, so the hi-vis bands stay put. Every other part rides one joint and moves with it. Each pose is exported under an empty named `pose_<name>` in one `out/calen.glb`, and `stand` is the rest pose. The site shows one pose at a time: a stage's `cast` names the pose and the yaw (`src/world/art/kit.ts`), and the loader sizes Calen by `pose_stand`. To add a pose, add it to `POSES` and to `CHARACTER_POSES` in `src/world/art/character.ts`.
+`POSES` in `character.py` names each pose by the joints it turns, as Euler angles in radians. Forward kinematics down `BONES` gives each joint a rigid transform. The skin body is rebuilt from the posed joints and painted where each face sat at rest, so the hi-vis bands stay put. Every other part rides one joint and moves with it. Each pose is exported under an empty named `pose_<name>` in one `out/calen.glb`, and `stand` is the rest pose. `sit` drops the hard hat and shows his hair. The site shows one pose at a time: a stage's `cast` names the pose and the yaw (`src/world/art/kit.ts`), and the loader sizes Calen by `pose_stand`. To add a pose, add it to `POSES` and to `CHARACTER_POSES` in `src/world/art/character.ts`.
 
 ## Workers
 

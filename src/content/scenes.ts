@@ -90,8 +90,8 @@ export const scenes: readonly Scene[] = [
     kind: 'interest',
     id: 'technical-interests',
     title: 'Technical Interests',
-    summary: 'Placeholder: using AI and new technology to make plant engineering work faster, safer and more reliable.',
-    topics: ['Placeholder topic one.', 'Placeholder topic two.'],
+    summary: 'Bringing data and new technology to plant engineering, to make the work faster, safer and more reliable.',
+    topics: ['Data analysis and engineering workflows enhanced by AI.', 'Adopting emerging technologies in industrial operations.'],
   },
   {
     kind: 'contact',

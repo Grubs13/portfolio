@@ -1,7 +1,7 @@
 # Builds a scene in the open Blender session and exports it to out/<scene>.glb for
 # `npm run models:pack` (`character.py` builds the character). Run `npm run models:dump`
 # first for the palette, then inside Blender with DIR set to this
-# folder and SCENE to 'carseland', 'reformer' or 'reliability':
+# folder and SCENE to 'carseland', 'reformer', 'reliability' or 'office':
 #   exec(open(f'{DIR}/run.py').read(), {'DIR': DIR, 'SCENE': 'carseland'})
 import io, contextlib, json, os, random, time
 
