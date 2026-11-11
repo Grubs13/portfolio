@@ -18,7 +18,9 @@ export async function mountWorld(canvas: HTMLCanvasElement, sections: readonly H
     throw new Error(`Expected ${scenes.length} scene sections, found ${sections.length}`);
   }
   const [character, loaded] = await Promise.all([characterFor(), loadSceneStages(scenes)]);
-  const stage = createStage(canvas, scenes, layoutScenes(scenes), character, loaded);
+  // `?transition=wipe` tries the wipe; the default pushes the next scene up with the scroll.
+  const transition = new URLSearchParams(location.search).get('transition') === 'wipe' ? 'wipe' : 'push';
+  const stage = createStage(canvas, scenes, layoutScenes(scenes), character, loaded, transition);
   await stage.ready;
   const last = scenes.length - 1;
   let centers: number[] = [];

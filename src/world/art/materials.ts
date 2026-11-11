@@ -187,16 +187,26 @@ export const glowMaterial = new ShaderMaterial({
   vertexColors: true,
 });
 
+/** How one scene gives way to the next: `push` slides the new scene up from below with the scroll, `wipe` reveals it in place. */
+export const TRANSITIONS = { push: 0, wipe: 1 } as const;
+export type Transition = keyof typeof TRANSITIONS;
+
 /**
- * Darkens the outer pixel of every silhouette: a pixel becomes ink when a
- * neighbor lies farther away by more than `threshold` in depth.
+ * Draws the frame to the screen. Each scene is inked first: a pixel becomes
+ * outline when a neighbor lies farther away by more than `threshold` in depth.
+ * While `progress` is above zero, scene B replaces scene A: pushed up from the
+ * bottom edge in whole art pixels, or wiped in behind a slanted, dithered edge.
  */
-export const outlineMaterial = new ShaderMaterial({
+export const screenMaterial = new ShaderMaterial({
   uniforms: {
-    tColor: { value: null },
-    tDepth: { value: null },
+    tColorA: { value: null },
+    tDepthA: { value: null },
+    tColorB: { value: null },
+    tDepthB: { value: null },
     texel: { value: new Vector2() },
     threshold: { value: 0 },
+    progress: { value: 0 },
+    mode: { value: TRANSITIONS.push },
   },
   vertexShader: /* glsl */ `
 varying vec2 vUv;
@@ -206,20 +216,48 @@ void main() {
 }
 `,
   fragmentShader: /* glsl */ `
-uniform sampler2D tColor;
-uniform sampler2D tDepth;
+uniform sampler2D tColorA;
+uniform sampler2D tDepthA;
+uniform sampler2D tColorB;
+uniform sampler2D tDepthB;
 uniform vec2 texel;
 uniform float threshold;
+uniform float progress;
+uniform int mode;
 varying vec2 vUv;
-void main() {
-  vec4 c = texture2D(tColor, vUv);
-  float d = texture2D(tDepth, vUv).r;
+const vec3 INK = vec3(0.07, 0.06, 0.16);
+vec4 inked(sampler2D tColor, sampler2D tDepth, vec2 uv) {
+  vec4 c = texture2D(tColor, uv);
+  float d = texture2D(tDepth, uv).r;
   float far = max(
-    max(texture2D(tDepth, vUv + vec2(texel.x, 0.)).r, texture2D(tDepth, vUv - vec2(texel.x, 0.)).r),
-    max(texture2D(tDepth, vUv + vec2(0., texel.y)).r, texture2D(tDepth, vUv - vec2(0., texel.y)).r)
+    max(texture2D(tDepth, uv + vec2(texel.x, 0.)).r, texture2D(tDepth, uv - vec2(texel.x, 0.)).r),
+    max(texture2D(tDepth, uv + vec2(0., texel.y)).r, texture2D(tDepth, uv - vec2(0., texel.y)).r)
   );
-  if (d < 1. && far - d > threshold) c.rgb = mix(c.rgb, vec3(0.07, 0.06, 0.16), 0.78);
-  gl_FragColor = c;
+  if (d < 1. && far - d > threshold) c.rgb = mix(c.rgb, INK, 0.78);
+  return c;
+}
+const float BAYER[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
+void main() {
+  if (progress <= 0.) {
+    gl_FragColor = inked(tColorA, tDepthA, vUv);
+    return;
+  }
+  if (mode == 0) {
+    // Both scenes move up together, the seam between them one inked row.
+    float shift = floor(progress / texel.y + 0.5) * texel.y;
+    float y = vUv.y - shift;
+    if (y >= 0.) gl_FragColor = inked(tColorA, tDepthA, vec2(vUv.x, y));
+    else gl_FragColor = inked(tColorB, tDepthB, vec2(vUv.x, y + 1.));
+    if (abs(y + texel.y * 0.5) < texel.y) gl_FragColor.rgb = INK;
+    return;
+  }
+  // The new scene rises behind a slanted edge that breaks up into chunky dither.
+  ivec2 cell = ivec2(mod(floor(gl_FragCoord.xy / 3.), 4.));
+  float dither = (BAYER[cell.x + cell.y * 4] + 0.5) / 16.;
+  float along = vUv.y + (vUv.x - 0.5) * 0.3;
+  float edge = progress * 1.54 - 0.22 + (dither - 0.5) * 0.14;
+  if (along < edge) gl_FragColor = inked(tColorB, tDepthB, vUv);
+  else gl_FragColor = inked(tColorA, tDepthA, vUv);
 }
 `,
   depthTest: false,
