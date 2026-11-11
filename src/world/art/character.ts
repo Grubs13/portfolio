@@ -11,8 +11,14 @@ import { palette, type Paint } from './palette';
 // Rounded parts with smooth shading stand in until a sculpted model replaces
 // them (see `model.ts`); both satisfy `Character`.
 
+/** The poses the modelled character is exported in, as `pose_<name>` groups of `calen.glb`. */
+export const CHARACTER_POSES = ['stand', 'inspect'] as const;
+export type CharacterPose = (typeof CHARACTER_POSES)[number];
+
 export interface Character {
   root: Group;
+  /** Shows the character in pose `name`. */
+  pose(name: CharacterPose): void;
 }
 
 /** Drawn larger than the workers around him, so he reads at a glance and his gear shows. */
@@ -106,5 +112,6 @@ export function buildCharacter(): Character {
   root.add(body);
   root.scale.setScalar(CHARACTER_SCALE);
 
-  return { root };
+  // The stand-in only stands.
+  return { root, pose() {} };
 }

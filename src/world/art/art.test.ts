@@ -43,7 +43,7 @@ async function loadFromDisk(): Promise<Partial<Record<string, StageBuilder>>> {
     if (!model) continue;
     const file = await readFile(new URL(`../../../public${model.url}`, import.meta.url));
     const gltf = await loader.parseAsync(file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength), '');
-    loaded[id] = () => stageFromGltf(gltf.scene, model.look);
+    loaded[id] = () => stageFromGltf(gltf.scene, model);
   }
   return loaded;
 }

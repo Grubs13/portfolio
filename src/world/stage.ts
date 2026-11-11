@@ -17,7 +17,7 @@ import type { Scene } from '../content/scenes';
 import type { TimelineState } from '../lib/timeline';
 import { stageFor } from './art';
 import type { Character } from './art/character';
-import type { StageBuilder } from './art/kit';
+import type { Cast, StageBuilder } from './art/kit';
 import { screenMaterial, shadowUniforms, SUN } from './art/materials';
 import type { WorldLayout } from './layout';
 
@@ -41,6 +41,8 @@ const CAMERA_DISTANCE = 100;
 const FRAME = 22;
 /** A three-quarter view: turned from the camera, which looks from +x +z, so one side shows. */
 const IDLE_YAW = Math.PI / 4 + 0.5;
+/** How the character stands in a scene whose stage does not cast it. */
+const IDLE_CAST: Cast = { pose: 'stand', yaw: IDLE_YAW };
 /** CSS pixels per art pixel: chunky enough to read as pixel art, fine enough for the character's detail. */
 const PIXEL_SIZE = 2;
 const NEAR = 0.1;
@@ -102,15 +104,16 @@ export function createStage(
 
   const world = new ThreeScene();
   const looks: Vector3[] = [];
+  const casts: Cast[] = [];
   scenes.forEach((scene, i) => {
     const anchor = layout.anchors[i]!;
-    const { object: stageObject, look } = stageFor(scene, loaded)();
+    const { object: stageObject, look, cast = IDLE_CAST } = stageFor(scene, loaded)();
     looks.push(new Vector3(...look));
+    casts.push(cast);
     stageObject.position.set(anchor.x, anchor.y, anchor.z);
     world.add(stageObject);
   });
   world.add(character.root);
-  character.root.rotation.y = IDLE_YAW;
 
   // Sunlight shadows come from a depth map rendered from the sun, centered on the character.
   const sunCamera = new OrthographicCamera(-SHADOW_REACH, SHADOW_REACH, SHADOW_REACH, -SHADOW_REACH, 1, SHADOW_DEPTH);
@@ -151,11 +154,14 @@ export function createStage(
     return viewHeight / rows;
   }
 
-  /** Renders scene `i` into half `side` of the buffer (0 left, 1 right), the character standing at its anchor, and returns world units per art pixel. */
+  /** Renders scene `i` into half `side` of the buffer (0 left, 1 right), the character cast at its anchor, and returns world units per art pixel. */
   function draw(i: number, side: 0 | 1): number {
     const unit = frame(focuses[i] ?? { x: 0.5, y: 0.5 });
     const anchor = layout.anchors[i]!;
+    const cast = casts[i]!;
     character.root.position.set(anchor.x, anchor.y, anchor.z);
+    character.root.rotation.y = cast.yaw;
+    character.pose(cast.pose);
     look.set(anchor.x, anchor.y, anchor.z).add(looks[i]!);
     // Snapped to whole art pixels and whole shadow texels, so the picture is the same every time the scene is shown.
     aimSnapped(camera, look, ISO_DIRECTION, CAMERA_DISTANCE, unit);
