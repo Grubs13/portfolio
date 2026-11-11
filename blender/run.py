@@ -1,5 +1,5 @@
 # Builds one scene in the open Blender session and exports it to out/<scene>.glb,
-# for `npm run models:pack` to compress into public/models. Run it inside Blender
+# for `npm run models:pack` to compress into public/models (`character.py` builds the character). Run it inside Blender
 # with DIR set to this folder and SCENE to 'reformer' or 'carseland':
 #   exec(open(f'{DIR}/run.py').read(), {'DIR': DIR, 'SCENE': 'reformer'})
 import io, contextlib, json, os, random, time

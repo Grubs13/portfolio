@@ -1,5 +1,5 @@
 import { AnimationClip, AnimationMixer, Box3, Color, Float32BufferAttribute, Group, Mesh, type MeshStandardMaterial } from 'three';
-import { buildCharacter, type Character } from './character';
+import { buildCharacter, type Character, CHARACTER_SCALE } from './character';
 import { smoothMaterial } from './materials';
 
 /**
@@ -17,8 +17,13 @@ export interface CharacterModel {
   clips: { idle: string; fly: string };
 }
 
-/** Set once a model is in `public/`; until then the stand-in from `character.ts` is used. */
-export const CHARACTER_MODEL: CharacterModel | null = null;
+/** Calen, modelled in Blender by `blender/character.py`. The stand-in from `character.ts` is used if it fails to load. */
+export const CHARACTER_MODEL: CharacterModel | null = {
+  url: '/models/calen.glb',
+  // The same height the flight-path tests allow for.
+  height: 2.3 * CHARACTER_SCALE,
+  clips: { idle: 'idle', fly: 'fly' },
+};
 
 /** Bakes each mesh's base color into vertex colors, the shape every lit shader here expects. */
 function paintVertices(mesh: Mesh) {
