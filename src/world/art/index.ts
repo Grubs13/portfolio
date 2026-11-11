@@ -6,7 +6,7 @@ import { reformerReharp } from './reformerReharp';
 
 /** Bespoke stages, keyed by scene id. */
 export const SCENE_ART: Readonly<Partial<Record<string, StageBuilder>>> = {
-  'reliability-engineer': carseland,
+  'ammonia-operations-engineer': carseland,
   'reformer-reharp': reformerReharp,
 };
 
