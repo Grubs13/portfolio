@@ -13,8 +13,8 @@ export interface CharacterModel {
   height: number;
   /** Turn applied so the model faces +z, in radians. */
   yaw?: number;
-  /** Clip names: a standing pose, and a looping flight cycle scrubbed by scroll. */
-  clips: { idle: string; fly: string };
+  /** A clip holding the standing pose, applied once; without one the model stands in its rest pose. */
+  pose?: string;
 }
 
 /** Calen, modelled in Blender by `blender/character.py`. The stand-in from `character.ts` is used if it fails to load. */
@@ -22,7 +22,7 @@ export const CHARACTER_MODEL: CharacterModel | null = {
   url: '/models/calen.glb',
   // The same height the flight-path tests allow for.
   height: 2.3 * CHARACTER_SCALE,
-  clips: { idle: 'idle', fly: 'fly' },
+  pose: 'idle',
 };
 
 /** Bakes each mesh's base color into vertex colors, the shape every lit shader here expects. */
@@ -37,7 +37,7 @@ function paintVertices(mesh: Mesh) {
   mesh.material = smoothMaterial;
 }
 
-export async function loadCharacter({ url, height, yaw = 0, clips }: CharacterModel): Promise<Character> {
+export async function loadCharacter({ url, height, yaw = 0, pose }: CharacterModel): Promise<Character> {
   const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
   const gltf = await new GLTFLoader().loadAsync(url);
   const model = gltf.scene;
@@ -53,26 +53,16 @@ export async function loadCharacter({ url, height, yaw = 0, clips }: CharacterMo
   const root = new Group();
   root.add(model);
 
-  const mixer = new AnimationMixer(model);
-  const action = (name: string) => {
-    const clip = AnimationClip.findByName(gltf.animations, name);
-    if (!clip) throw new Error(`${url} has no "${name}" clip; it has ${gltf.animations.map((c) => c.name).join(', ')}`);
-    return mixer.clipAction(clip).play();
-  };
-  const idle = action(clips.idle);
-  const fly = action(clips.fly);
+  if (pose) {
+    const clip = AnimationClip.findByName(gltf.animations, pose);
+    if (!clip) throw new Error(`${url} has no "${pose}" clip; it has ${gltf.animations.map((c) => c.name).join(', ')}`);
+    const mixer = new AnimationMixer(model);
+    mixer.clipAction(clip).play();
+    mixer.update(0);
+  }
 
-  return {
-    root,
-    pose(flight, stride) {
-      // Scroll drives time, so the flight cycle scrubs with the page and the idle pose holds still.
-      idle.setEffectiveWeight(1 - flight);
-      fly.setEffectiveWeight(flight);
-      idle.time = 0;
-      fly.time = (stride % 1) * fly.getClip().duration;
-      mixer.update(0);
-    },
-  };
+  // He holds the same pose in flight; the stage still turns him to face the way he travels.
+  return { root, pose() {} };
 }
 
 /** The sculpted character when one is set and loads, otherwise the stand-in. */

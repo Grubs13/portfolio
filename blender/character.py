@@ -5,9 +5,8 @@
 # navy cargo pants with hi-vis shin bands and tan work boots. Chunky proportions, after the style references:
 # big head, hands and boots.
 #
-# Each part rides one bone rigidly. Clips: `idle` (one held pose) and `fly` (one
-# limb-swing cycle, which the site scrubs with scroll). Built in Blender's axes:
-# z up, facing -y. Run inside Blender with DIR set to this folder:
+# Each part rides one bone rigidly. One clip, `idle`, holds the standing pose.
+# Built in Blender's axes: z up, facing -y. Run inside Blender with DIR set to this folder:
 #   exec(open(f'{DIR}/character.py').read(), {'DIR': DIR})
 import io, contextlib, math, os
 import bpy, bmesh
@@ -222,27 +221,11 @@ def animate(arm):
     for f in (1, 2):
         key(arm, idle, f, {b: 0.0 for b in bones})
     idle.use_fake_user = True
-    # Fly: leaning into the flight, legs trailing, limbs swinging through one cycle.
-    fly = bpy.data.actions.new('fly')
-    arm.animation_data.action = fly
-    frames = 24
-    for i in range(5):
-        t = i / 4
-        swing = math.sin(2 * math.pi * t)
-        f = 1 + t * frames
-        key(arm, fly, f, {
-            # Positive turns about x lean the top toward -y, his front.
-            'body': 0.45, 'head': -0.25,
-            'arm.R': -0.7 * swing + 0.2, 'arm.L': 0.7 * swing + 0.2,
-            'leg.R': 0.5 + 0.25 * swing, 'leg.L': 0.5 - 0.25 * swing,
-        })
-    fly.use_fake_user = True
-    # Linear keys so the cycle scrubs evenly with scroll.
-    for action in (idle, fly):
+    for action in (idle,):
         for fc in action_fcurves(action):
             for kp in fc.keyframe_points: kp.interpolation = 'LINEAR'
     arm.animation_data.action = None
-    for action in (idle, fly):
+    for action in (idle,):
         track = arm.animation_data.nla_tracks.new(); track.name = action.name
         track.strips.new(action.name, 1, action)
 
