@@ -2,6 +2,7 @@ import { scenes } from '../content/scenes';
 import { sectionProgress } from '../lib/sectionProgress';
 import { timeline } from '../lib/timeline';
 import { characterFor } from './art/model';
+import { loadSceneStages } from './art/sceneModel';
 import { layoutScenes } from './layout';
 import { createStage } from './stage';
 
@@ -16,7 +17,8 @@ export async function mountWorld(canvas: HTMLCanvasElement, sections: readonly H
   if (sections.length !== scenes.length) {
     throw new Error(`Expected ${scenes.length} scene sections, found ${sections.length}`);
   }
-  const stage = createStage(canvas, scenes, layoutScenes(scenes), await characterFor());
+  const [character, loaded] = await Promise.all([characterFor(), loadSceneStages(scenes)]);
+  const stage = createStage(canvas, scenes, layoutScenes(scenes), character, loaded);
   await stage.ready;
   const last = scenes.length - 1;
   let centers: number[] = [];

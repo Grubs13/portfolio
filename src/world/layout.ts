@@ -6,18 +6,9 @@ export interface Vec3 {
   z: number;
 }
 
-/** Quadratic Bézier from one anchor to the next. */
-export interface Segment {
-  start: Vec3;
-  control: Vec3;
-  end: Vec3;
-}
-
 export interface WorldLayout {
   /** One anchor per scene, in scene order. */
   anchors: Vec3[];
-  /** `segments[i]` runs from `anchors[i]` to `anchors[i + 1]`. */
-  segments: Segment[];
 }
 
 /** Largest horizontal extent of any scene's ground from its anchor. It covers the screen at every framing. */
@@ -31,7 +22,6 @@ const RECEDE = { x: -Math.SQRT1_2, z: -Math.SQRT1_2 };
 const SWING = 70;
 const RISE = 10;
 const DEPTH = 80;
-const ARC = 75;
 
 /**
  * Places scenes on an ascending zig-zag: alternating left and right while
@@ -47,40 +37,5 @@ export function layoutScenes(scenes: readonly Scene[]): WorldLayout {
     };
   });
 
-  const segments = anchors.slice(1).map((end, i) => {
-    const start = anchors[i]!;
-    return {
-      start,
-      end,
-      control: {
-        x: (start.x + end.x) / 2,
-        y: (start.y + end.y) / 2 + ARC,
-        z: (start.z + end.z) / 2,
-      },
-    };
-  });
-
-  return { anchors, segments };
-}
-
-export function pointOnSegment({ start, control, end }: Segment, t: number): Vec3 {
-  const a = (1 - t) * (1 - t);
-  const b = 2 * (1 - t) * t;
-  const c = t * t;
-  return {
-    x: a * start.x + b * control.x + c * end.x,
-    y: a * start.y + b * control.y + c * end.y,
-    z: a * start.z + b * control.z + c * end.z,
-  };
-}
-
-/** Derivative of the segment with respect to t, not normalized. */
-export function segmentTangent({ start, control, end }: Segment, t: number): Vec3 {
-  const a = 2 * (1 - t);
-  const b = 2 * t;
-  return {
-    x: a * (control.x - start.x) + b * (end.x - control.x),
-    y: a * (control.y - start.y) + b * (end.y - control.y),
-    z: a * (control.z - start.z) + b * (end.z - control.z),
-  };
+  return { anchors };
 }
