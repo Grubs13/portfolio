@@ -32,10 +32,15 @@ export async function mountWorld(canvas: HTMLCanvasElement, sections: readonly H
       const width = canvas.clientWidth;
       const style = getComputedStyle(document.documentElement);
       const beside = style.getPropertyValue('--world-beside').trim() === '1';
-      // Beside the text column, frame the subject in the middle of the free space to its right.
-      const x = beside ? (sections[0]!.getBoundingClientRect().right + width) / (2 * width) : 0.5;
       const y = parseFloat(style.getPropertyValue('--world-focus-y')) || 0.5;
-      stage.resize(width, canvas.clientHeight, { x, y });
+      // Beside the text column, frame each scene's subject in the middle of the free space on the other side of its panel.
+      const focuses = sections.map((section) => {
+        if (!beside) return { x: 0.5, y };
+        const panel = section.querySelector('.panel')!.getBoundingClientRect();
+        const left = panel.left + panel.width / 2 < width / 2;
+        return { x: left ? (panel.right + width) / (2 * width) : panel.left / (2 * width), y };
+      });
+      stage.resize(width, canvas.clientHeight, focuses);
     },
 
     render() {

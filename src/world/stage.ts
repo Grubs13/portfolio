@@ -30,7 +30,8 @@ export interface Focus {
 export interface Stage {
   /** Resolves once shaders are compiled, so the first render does not block on them. */
   ready: Promise<unknown>;
-  resize(width: number, height: number, focus: Focus): void;
+  /** `focuses[i]` is where scene i frames its subject. */
+  resize(width: number, height: number, focuses: readonly Focus[]): void;
   render(state: TimelineState): void;
 }
 
@@ -125,10 +126,26 @@ export function createStage(
   const look = new Vector3();
   let aspect = 1;
   let rows = 1;
-  let focus: Focus = { x: 0.5, y: 0.5 };
+  let focuses: readonly Focus[] = [];
 
-  /** Renders scene `i` into `target`, the character standing at its anchor. */
-  function draw(i: number, target: WebGLRenderTarget, unit: number) {
+  /** Sets the camera's view for a subject framed at `focus`, and returns world units per art pixel. */
+  function frame({ x, y }: Focus): number {
+    // The free part of the screen is the largest band centered on the focus along each axis.
+    const freeX = Math.max(0.2, 2 * Math.min(x, 1 - x));
+    const freeY = Math.max(0.2, 2 * Math.min(y, 1 - y));
+    const viewHeight = Math.max(FRAME / freeY, FRAME / (aspect * freeX));
+    const viewWidth = viewHeight * aspect;
+    camera.left = -x * viewWidth;
+    camera.right = (1 - x) * viewWidth;
+    camera.top = y * viewHeight;
+    camera.bottom = -(1 - y) * viewHeight;
+    camera.updateProjectionMatrix();
+    return viewHeight / rows;
+  }
+
+  /** Renders scene `i` into `target`, the character standing at its anchor, and returns world units per art pixel. */
+  function draw(i: number, target: WebGLRenderTarget): number {
+    const unit = frame(focuses[i] ?? { x: 0.5, y: 0.5 });
     const anchor = layout.anchors[i]!;
     character.root.position.set(anchor.x, anchor.y, anchor.z);
     look.set(anchor.x, anchor.y, anchor.z).add(looks[i]!);
@@ -143,12 +160,13 @@ export function createStage(
     world.overrideMaterial = null;
     renderer.setRenderTarget(target);
     renderer.render(world, camera);
+    return unit;
   }
 
   return {
     ready: Promise.all([renderer.compileAsync(world, camera), renderer.compileAsync(post, camera)]),
 
-    resize(width, height, nextFocus) {
+    resize(width, height, nextFocuses) {
       const columns = Math.max(1, Math.round(width / PIXEL_SIZE));
       rows = Math.max(1, Math.round(height / PIXEL_SIZE));
       renderer.setPixelRatio(1);
@@ -157,31 +175,21 @@ export function createStage(
       incoming.setSize(columns, rows);
       uniforms.texel!.value.set(1 / columns, 1 / rows);
       aspect = width / height;
-      focus = nextFocus;
+      focuses = nextFocuses;
     },
 
     render(state) {
-      // The free part of the screen is the largest band centered on `focus` along each axis.
-      const freeX = Math.max(0.2, 2 * Math.min(focus.x, 1 - focus.x));
-      const freeY = Math.max(0.2, 2 * Math.min(focus.y, 1 - focus.y));
-      const viewHeight = Math.max(FRAME / freeY, FRAME / (aspect * freeX));
-      const viewWidth = viewHeight * aspect;
-      camera.left = -focus.x * viewWidth;
-      camera.right = (1 - focus.x) * viewWidth;
-      camera.top = focus.y * viewHeight;
-      camera.bottom = -(1 - focus.y) * viewHeight;
-      camera.updateProjectionMatrix();
-      const unit = viewHeight / rows;
-      uniforms.threshold!.value = (OUTLINE_PIXELS * unit) / (FAR - NEAR);
-
+      // Mirrored framings share a scale, so one outline threshold suits both scenes in a wipe.
+      let unit: number;
       if (state.phase === 'dwell') {
-        draw(state.scene, outgoing, unit);
+        unit = draw(state.scene, outgoing);
         uniforms.progress!.value = 0;
       } else {
-        draw(state.from, outgoing, unit);
-        draw(state.to, incoming, unit);
+        unit = draw(state.from, outgoing);
+        draw(state.to, incoming);
         uniforms.progress!.value = state.t;
       }
+      uniforms.threshold!.value = (OUTLINE_PIXELS * unit) / (FAR - NEAR);
       renderer.setRenderTarget(null);
       renderer.render(post, camera);
     },
