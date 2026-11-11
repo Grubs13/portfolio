@@ -10,7 +10,7 @@ export const SCENE_ART: Readonly<Partial<Record<string, StageBuilder>>> = {
   'reformer-reharp': reformerReharp,
 };
 
-/** A scene's own art when it has some, otherwise the placeholder for its kind. */
-export function stageFor(scene: Scene): StageBuilder {
-  return SCENE_ART[scene.id] ?? PLACEHOLDERS[scene.kind];
+/** A scene's loaded model, else its code art, else the placeholder for its kind. */
+export function stageFor(scene: Scene, loaded: Partial<Record<string, StageBuilder>> = {}): StageBuilder {
+  return loaded[scene.id] ?? SCENE_ART[scene.id] ?? PLACEHOLDERS[scene.kind];
 }

@@ -19,6 +19,7 @@ import type { Scene } from '../content/scenes';
 import type { TimelineState } from '../lib/timeline';
 import { stageFor } from './art';
 import type { Character } from './art/character';
+import type { StageBuilder } from './art/kit';
 import { outlineMaterial, shadowUniforms, SUN } from './art/materials';
 import { pointOnSegment, segmentTangent, type Vec3, type WorldLayout } from './layout';
 
@@ -126,7 +127,14 @@ function aimSnapped(camera: OrthographicCamera, target: Vector3, direction: Vect
   camera.updateMatrixWorld();
 }
 
-export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[], layout: WorldLayout, character: Character): Stage {
+export function createStage(
+  canvas: HTMLCanvasElement,
+  scenes: readonly Scene[],
+  layout: WorldLayout,
+  character: Character,
+  /** Stages loaded from scene models, keyed by scene id. */
+  loaded: Partial<Record<string, StageBuilder>> = {},
+): Stage {
   // The world renders at art-pixel resolution into a target, the outline pass
   // writes that same resolution to the canvas, and CSS scales the canvas up
   // with hard pixel edges. Fewer pixels make it cheaper than a full-size render.
@@ -144,7 +152,7 @@ export function createStage(canvas: HTMLCanvasElement, scenes: readonly Scene[],
   const lookBlend = new Vector3();
   scenes.forEach((scene, i) => {
     const anchor = layout.anchors[i]!;
-    const { object: stageObject, look } = stageFor(scene)();
+    const { object: stageObject, look } = stageFor(scene, loaded)();
     looks.push(new Vector3(...look));
     stageObject.position.set(anchor.x, anchor.y, anchor.z);
     world.add(stageObject);

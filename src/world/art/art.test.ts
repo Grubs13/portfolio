@@ -1,10 +1,13 @@
+import { readFile } from 'node:fs/promises';
 import { Box3, Mesh, type Object3D, Triangle, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { type Scene, scenes } from '../../content/scenes';
 import { STAGE_RADIUS, layoutScenes, pointOnSegment } from '../layout';
 import { stageFor, SCENE_ART } from '.';
 import { CHARACTER_SCALE } from './character';
+import type { StageBuilder } from './kit';
 import { PLACEHOLDERS } from './placeholders';
+import { SCENE_MODELS, sceneLoader, stageFromGltf } from './sceneModel';
 
 // Generous bounds of the character in any travel pose, measured from its feet.
 const BODY_HALF_WIDTH = 0.45 * CHARACTER_SCALE;
@@ -37,7 +40,24 @@ function horizontalReach(object: Object3D): number {
   return triangles(object).reduce((reach, t) => Math.max(reach, ...[t.a, t.b, t.c].map((v) => Math.hypot(v.x, v.z))), 0);
 }
 
-const scenesWithArt = scenes.flatMap((scene, i) => (SCENE_ART[scene.id] ? [[scene.id, i] as const] : []));
+/** Each scene model read from `public/`, as the browser would load it. */
+async function loadFromDisk(): Promise<Partial<Record<string, StageBuilder>>> {
+  const loader = await sceneLoader();
+  const loaded: Partial<Record<string, StageBuilder>> = {};
+  for (const [id, model] of Object.entries(SCENE_MODELS)) {
+    if (!model) continue;
+    const file = await readFile(new URL(`../../../public${model.url}`, import.meta.url));
+    const gltf = await loader.parseAsync(file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength), '');
+    loaded[id] = () => stageFromGltf(gltf.scene, model.look);
+  }
+  return loaded;
+}
+
+const loaded = await loadFromDisk();
+const build = (scene: Scene) => stageFor(scene, loaded)();
+const scenesWithArt = scenes.flatMap((scene, i) =>
+  SCENE_ART[scene.id] || loaded[scene.id] ? [[`${scene.id}${loaded[scene.id] ? ' model' : ''}`, i] as const] : [],
+);
 
 describe('scene art', () => {
   it('keys art only by ids of real scenes, so none silently falls back', () => {
@@ -52,19 +72,24 @@ describe('scene art', () => {
     expect(stageFor(without)).toBe(PLACEHOLDERS[without.kind]);
   });
 
+  it('models only real scenes', () => {
+    const ids = new Set(scenes.map((s) => s.id));
+    for (const id of Object.keys(SCENE_MODELS)) expect(ids).toContain(id);
+  });
+
   it.each(scenes.map((s) => [s.id, s] as const))('keeps the %s stage within STAGE_RADIUS of its anchor', (_, scene) => {
-    expect(horizontalReach(stageFor(scene)().object)).toBeLessThanOrEqual(STAGE_RADIUS + 1e-4);
+    expect(horizontalReach(build(scene).object)).toBeLessThanOrEqual(STAGE_RADIUS + 1e-4);
   });
 
   it.each(scenesWithArt)('merges the %s art into one mesh per material, so it costs one draw call each', (_, i) => {
-    const parts = meshes(stageFor(scenes[i]!)().object);
+    const parts = meshes(build(scenes[i]!).object);
     expect(new Set(parts.map((m) => m.material)).size).toBe(parts.length);
   });
 
   it.each(scenesWithArt)('keeps the travel paths into and out of %s clear of its art', (_, i) => {
     const layout = layoutScenes(scenes);
     const anchor = layout.anchors[i]!;
-    const stage = stageFor(scenes[i]!)().object;
+    const stage = build(scenes[i]!).object;
     stage.position.set(anchor.x, anchor.y, anchor.z);
     // The path rises out of the rock below, so only parts above the walkable surface count.
     const props = triangles(stage).filter((t) => Math.max(t.a.y, t.b.y, t.c.y) > anchor.y + 0.01);
