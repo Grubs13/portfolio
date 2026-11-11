@@ -4,10 +4,11 @@
 # waist band, a chest harness carrying a radio and a gas detector, a name tag,
 # navy cargo pants with hi-vis shin bands and tan work boots.
 #
-# The body is `figure.py`'s skin body, smoothed finely, so shoulders, the
-# chest-to-waist taper, elbows, knees and boots blend like the chunky brawlers in
-# the style references. Clothing is painted onto it by region. Head, hands and gear
-# are modelled separately, each riding a joint of the skeleton. No rig: each pose
+# He is built like the site workers in `detail.py`, at their proportions: the
+# skin body from `figure.py`, lightly smoothed so it keeps crisp facets, with the
+# clothing painted on by region, a head about a seventh of his height (a little
+# larger than theirs, so his glasses read), a snug domed hat and mitten hands.
+# His own gear rides the joints of the skeleton. No rig: each pose
 # in `POSES` turns joints, the body and parts are built once per pose, and each
 # pose's meshes are exported under an empty named `pose_<name>`, which the site
 # shows one at a time. Built in Blender's axes: z up, facing -y. Run inside
@@ -72,7 +73,7 @@ def body_paint(c):
         return 'navy'
     # Henley: stripes down front and back from the shoulders to a waist band, the undershirt at the collar.
     if 1.04 < z < 1.13: return 'reflective' if 1.075 < z < 1.095 else 'hiVis'
-    if 1.13 <= z < 1.6 and 0.12 < ax < 0.21 and abs(y) > 0.06: return 'reflective' if 0.15 < ax < 0.18 else 'hiVis'
+    if 1.13 <= z < 1.6 and 0.11 < ax < 0.21 and abs(y) > 0.06: return 'hiVis'
     if 1.56 < z < 1.64 and ax < 0.045 and y < -0.06: return 'undershirt'
     return 'navy'
 
@@ -92,89 +93,74 @@ POSES = {
     },
 }
 def body(collection, G=None):
-    # Fine enough that the painted stripes and bands keep straight edges.
-    bm = skin_body(collection, G, 3, lambda c: BODY_PAINTS.index(body_paint(c)))
-    return mesh_object('calen_body', bm, collection, BODY_PAINTS)
+    bm = skin_body(collection, G, 2, lambda c: BODY_PAINTS.index(body_paint(c)))
+    return mesh_object('calen_body', bm, collection, BODY_PAINTS, smooth=False)
 
 # ---- head ----
 
-HEAD_PAINTS = ['skin', 'stubble', 'hair', 'lip', 'skinShade']
-HEAD_C = Vector((0, 0.0, 1.9))
+HEAD_PAINTS = ['skin', 'stubble', 'hair']
+HEAD_C = Vector((0, 0, 1.87))
+HEAD_SIZE = Vector((0.19, 0.2, 0.22))
 
 def head(collection):
-    """A big head with a square jaw, stubble on the jaw and lip, brown hair at the sides and back under the hat."""
+    """The head: skin in front, stubble along the jaw, brown hair at the back and sides under the hat,
+    with a nose, ears, thick black frames, a navy toque edge and the white hard hat with its teal strap
+    and headlamp."""
     bm = bmesh.new()
-    bmesh.ops.create_uvsphere(bm, u_segments=24, v_segments=16, radius=1)
-    for v in bm.verts:
-        x, y, z = v.co
-        # Squarer, wider jaw below, a flatter back, the chin brought forward.
-        jaw = max(0.0, -z)
-        v.co = Vector((x * 0.235 * (1 + 0.1 * jaw), y * 0.235 * (1 - 0.08 * max(0.0, y)) - 0.01 * jaw, z * 0.27))
-        if z < -0.55 and y < 0: v.co.y -= 0.08 * (-z - 0.55)
-    bmesh.ops.transform(bm, matrix=Matrix.Translation(HEAD_C), verts=bm.verts)
-    bm = smoothed(collection, bm, 1)
+    bmesh.ops.create_uvsphere(bm, u_segments=12, v_segments=8, radius=1)
+    bmesh.ops.transform(bm, matrix=Matrix.Translation(HEAD_C) @ Matrix.Diagonal((*HEAD_SIZE, 1)), verts=bm.verts)
     for f in bm.faces:
         x, y, z = f.calc_center_median() - HEAD_C
-        front = y < -0.08
         paint = 'skin'
-        if z < -0.12 and (front or abs(x) > 0.15): paint = 'stubble'
-        if -0.075 < z < -0.055 and abs(x) < 0.055 and front: paint = 'stubble'
-        if -0.115 < z < -0.09 and abs(x) < 0.05 and y < -0.18: paint = 'lip'
-        if z > 0.02 and not front: paint = 'hair'
-        if z > -0.05 and y > 0.05: paint = 'hair'
-        if z > 0.11 and front and abs(x) > 0.1: paint = 'hair'
+        if z < -0.08 and y < -0.04: paint = 'stubble'
+        if y > 0.03 and z > -0.1: paint = 'hair'
+        if abs(x) > 0.15 and z > -0.02 and y > -0.08: paint = 'hair'
         f.material_index = HEAD_PAINTS.index(paint)
-    made = [mesh_object('calen_head', bm, collection, HEAD_PAINTS)]
+    made = [mesh_object('calen_head', bm, collection, HEAD_PAINTS, smooth=False)]
 
-    def part(name, paint, maker, M, sub=0, smooth=True):
+    def part(name, paint, maker, M, sub=0):
         b = bmesh.new(); maker(b); bmesh.ops.transform(b, matrix=M, verts=b.verts)
         if sub: b = smoothed(collection, b, sub)
-        made.append(mesh_object(name, b, collection, [paint], smooth))
+        made.append(mesh_object(name, b, collection, [paint], smooth=False))
 
     cube = lambda b: bmesh.ops.create_cube(b, size=1)
-    sphere = lambda b: bmesh.ops.create_uvsphere(b, u_segments=12, v_segments=8, radius=0.5)
-    cyl = lambda seg, r1, r2: (lambda b: bmesh.ops.create_cone(b, cap_ends=True, segments=seg, radius1=r1, radius2=r2, depth=1))
+    disc = lambda seg: (lambda b: bmesh.ops.create_cone(b, cap_ends=True, segments=seg, radius1=1, radius2=1, depth=1))
     T = lambda x, y, z, sx=1, sy=1, sz=1: Matrix.Translation(HEAD_C + Vector((x, y, z))) @ Matrix.Diagonal((sx, sy, sz, 1))
-    # Nose, ears, brow.
-    part('nose', 'skin', sphere, T(0, -0.235, -0.01, 0.07, 0.07, 0.1), 1)
-    for x in (-0.235, 0.235): part('ear', 'skinShade', sphere, T(x, 0.0, 0.0, 0.05, 0.09, 0.11), 1)
-    part('brow', 'hair', cube, T(0, -0.215, 0.085, 0.3, 0.04, 0.025), 1)
-    # Thick black square frames, light lenses, blue eyes behind.
-    for x in (-0.095, 0.095):
-        part('eye', 'eye', sphere, T(x, -0.21, 0.035, 0.05, 0.03, 0.05))
-        part('frame', 'black', cube, T(x, -0.232, 0.035, 0.15, 0.03, 0.115), 0, False)
-        part('lens', 'lens', cube, T(x, -0.246, 0.035, 0.115, 0.01, 0.08), 0, False)
-    part('bridge', 'black', cube, T(0, -0.236, 0.05, 0.06, 0.025, 0.025), 0, False)
-    for x in (-0.225, 0.225): part('temple', 'black', cube, T(x, -0.11, 0.05, 0.025, 0.24, 0.025), 0, False)
-    # Navy toque edge under the brim, the hat dome with its ridge, brim, teal strap, headlamp.
-    part('toque', 'toque', cyl(24, 0.25, 0.25), T(0, 0.0, 0.16, 1, 1.04, 0.06), 1)
-    part('hat', 'hardHat', sphere, T(0, 0.0, 0.2, 0.56, 0.6, 0.5), 1)
-    part('brim', 'hardHat', cyl(24, 0.27, 0.28), T(0, -0.04, 0.19, 1, 1.12, 0.035), 1)
-    part('ridge', 'hardHat', cube, T(0, 0.0, 0.44, 0.06, 0.42, 0.06), 2)
-    part('strap', 'headband', cyl(24, 0.268, 0.272), T(0, 0.0, 0.26, 1, 1.07, 0.05))
-    part('lamp', 'black', cube, T(0, -0.3, 0.32, 0.15, 0.08, 0.11), 1)
-    part('lampLens', 'lamp', cube, T(0, -0.342, 0.32, 0.08, 0.01, 0.06), 0, False)
+    part('nose', 'skin', cube, T(0, -0.2, -0.025, 0.05, 0.05, 0.075))
+    for x in (-0.19, 0.19): part('ear', 'skin', cube, T(x, 0.0, -0.005, 0.03, 0.06, 0.08))
+    # Thick black square frames with light lenses.
+    for x in (-0.072, 0.072):
+        part('frame', 'black', cube, T(x, -0.19, 0.03, 0.1, 0.025, 0.075))
+        part('lens', 'lens', cube, T(x, -0.2035, 0.03, 0.074, 0.004, 0.05))
+    part('bridge', 'black', cube, T(0, -0.19, 0.045, 0.05, 0.02, 0.02))
+    for x in (-0.19, 0.19): part('temple', 'black', cube, T(x, -0.1, 0.045, 0.02, 0.18, 0.02))
+    # The toque edge, a snug dome with a brim, the teal strap round the dome and the headlamp on it.
+    part('toque', 'toque', disc(12), T(0, 0.0, 0.055, 0.195, 0.205, 0.04))
+    dome = bmesh.new()
+    bmesh.ops.create_uvsphere(dome, u_segments=12, v_segments=6, radius=1)
+    bmesh.ops.delete(dome, geom=[v for v in dome.verts if v.co.z < -1e-4], context='VERTS')
+    bmesh.ops.transform(dome, matrix=T(0, 0, 0.08, 0.215, 0.23, 0.19), verts=dome.verts)
+    made.append(mesh_object('hat', dome, collection, ['hardHat'], smooth=False))
+    part('brim', 'hardHat', disc(12), T(0, -0.03, 0.085, 0.26, 0.285, 0.03))
+    part('strap', 'headband', disc(12), T(0, 0, 0.125, 0.212, 0.227, 0.035))
+    part('lamp', 'black', cube, T(0, -0.225, 0.15, 0.085, 0.05, 0.06))
+    part('lampLens', 'lamp', cube, T(0, -0.251, 0.15, 0.05, 0.004, 0.035))
     return made
 
 # ---- hands and gear ----
 
 def hand(collection, side):
-    """A big mitten hand with a thumb, relaxed at his side."""
-    s = -1 if side == 'R' else 1
+    """A mitten hand like the workers', relaxed at his side, and his watch on the left wrist."""
     wx, wy, wz = JOINTS[f'wrist{side}'][0]
     b = bmesh.new()
     bmesh.ops.create_cube(b, size=1)
-    bmesh.ops.transform(b, matrix=Matrix.Translation((wx + s * 0.005, wy - 0.01, wz - 0.07)) @ Matrix.Diagonal((0.12, 0.17, 0.19, 1)), verts=b.verts)
-    thumb = bmesh.new()
-    bmesh.ops.create_cube(thumb, size=1)
-    bmesh.ops.transform(thumb, matrix=Matrix.Translation((wx - s * 0.045, wy - 0.085, wz - 0.04)) @ Matrix.Rotation(-0.4 * s, 4, 'Y') @ Matrix.Diagonal((0.055, 0.06, 0.1, 1)), verts=thumb.verts)
-    me = bpy.data.meshes.new('t'); thumb.to_mesh(me); thumb.free(); b.from_mesh(me); bpy.data.meshes.remove(me)
-    made = [mesh_object(f'calen_hand{side}', smoothed(collection, b, 2), collection, ['skin'])]
+    bmesh.ops.transform(b, matrix=Matrix.Translation((wx, wy - 0.01, wz - 0.06)) @ Matrix.Diagonal((0.14, 0.17, 0.21, 1)), verts=b.verts)
+    made = [mesh_object(f'calen_hand{side}', smoothed(collection, b, 1), collection, ['skin'], smooth=False)]
     if side == 'L':
         w = bmesh.new()
         bmesh.ops.create_cone(w, cap_ends=True, segments=14, radius1=0.068, radius2=0.068, depth=0.035)
         bmesh.ops.transform(w, matrix=Matrix.Translation((wx, wy, wz + 0.03)), verts=w.verts)
-        made.append(mesh_object('calen_watch', w, collection, ['reflective']))
+        made.append(mesh_object('calen_watch', w, collection, ['reflective'], smooth=False))
     return [(f'wrist{side}', ob) for ob in made]
 
 def flashlight(collection):
@@ -186,40 +172,32 @@ def flashlight(collection):
         b = bmesh.new()
         bmesh.ops.create_cone(b, cap_ends=True, segments=12, radius1=r1, radius2=r2, depth=z1 - z0)
         bmesh.ops.transform(b, matrix=Matrix.Translation((wx + 0.005, wy - 0.03, (z0 + z1) / 2)), verts=b.verts)
-        made.append(('wristL', mesh_object(name, b, collection, [paint])))
+        made.append(('wristL', mesh_object(name, b, collection, [paint], smooth=False)))
     return made
 
 def gear(collection):
     """Chest harness with radio and gas detector, name tag, crest, and the hip radio."""
     made = []
-    def box(name, paint, c, size, sub=0, joint='chest'):
+    def box(name, paint, c, size, joint='chest'):
         b = bmesh.new(); bmesh.ops.create_cube(b, size=1)
         bmesh.ops.transform(b, matrix=Matrix.Translation(c) @ Matrix.Diagonal((*size, 1)), verts=b.verts)
-        if sub: b = smoothed(collection, b, sub)
-        made.append((joint, mesh_object(name, b, collection, [paint], smooth=bool(sub))))
+        made.append((joint, mesh_object(name, b, collection, [paint], smooth=False)))
     for s in (-1, 1):
         # Straps down the front, over the shoulder and down the back.
         box('strap', 'black', (s * 0.2, -0.175, 1.33), (0.055, 0.03, 0.42))
         box('strap', 'black', (s * 0.2, 0.165, 1.33), (0.055, 0.03, 0.42))
         box('strap', 'black', (s * 0.21, 0.0, 1.61), (0.055, 0.34, 0.035))
-    box('radio', 'black', (-0.21, -0.215, 1.49), (0.1, 0.06, 0.15), 1)
+    box('radio', 'black', (-0.21, -0.215, 1.49), (0.1, 0.06, 0.15))
     box('antenna', 'steelDark', (-0.24, -0.215, 1.6), (0.022, 0.022, 0.1))
-    box('detector', 'black', (0.21, -0.215, 1.29), (0.1, 0.06, 0.18), 1)
+    box('detector', 'black', (0.21, -0.215, 1.29), (0.1, 0.06, 0.18))
     box('screen', 'lens', (0.21, -0.248, 1.27), (0.055, 0.01, 0.045))
     box('button', 'tankRed', (0.21, -0.248, 1.215), (0.03, 0.01, 0.022))
     box('led', 'detectorLed', (0.21, -0.248, 1.355), (0.04, 0.01, 0.018))
     box('nameTag', 'tube', (-0.11, -0.185, 1.43), (0.1, 0.01, 0.045))
     box('crest', 'pipeBlue', (0.1, -0.18, 1.44), (0.07, 0.01, 0.05))
-    box('hipRadio', 'black', (-0.27, -0.06, 1.01), (0.06, 0.09, 0.16), 1, 'pelvis')
-    box('hipRadioFace', 'pipeBlue', (-0.302, -0.06, 1.01), (0.01, 0.07, 0.1), 0, 'pelvis')
+    box('hipRadio', 'black', (-0.27, -0.06, 1.01), (0.06, 0.09, 0.16), 'pelvis')
+    box('hipRadioFace', 'pipeBlue', (-0.302, -0.06, 1.01), (0.01, 0.07, 0.1), 'pelvis')
     for z in (1.5, 1.45): box('button', 'hair', (0, -0.172, z), (0.025, 0.01, 0.025))
-    # Work boots over the feet: a rounded toe cap, the shaft, a darker welt and sole, laces.
-    for s, side in ((-1, 'R'), (1, 'L')):
-        x = s * 0.14
-        box('boot', 'boots', (x, -0.05, 0.1), (0.22, 0.36, 0.17), 2, f'ankle{side}')
-        box('boot', 'boots', (x, 0.01, 0.2), (0.21, 0.22, 0.17), 2, f'ankle{side}')
-        box('sole', 'sole', (x, -0.05, 0.03), (0.225, 0.365, 0.05), 1, f'ankle{side}')
-        box('laces', 'bootsDark', (x, -0.11, 0.2), (0.07, 0.09, 0.01), 0, f'ankle{side}')
     return made
 
 def lowest(obs):
@@ -258,7 +236,7 @@ def run(DIR):
     bpy.ops.object.select_all(action='DESELECT')
     for ob in col.objects: ob.select_set(True)
     with contextlib.redirect_stdout(io.StringIO()):
-        bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=True, export_normals=True,
+        bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=True, export_normals=False,
                                   export_texcoords=False, export_tangents=False, export_vertex_color='NONE',
                                   export_animations=False, export_apply=True, export_cameras=False, export_lights=False, export_yup=True)
     tris = sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in obs)

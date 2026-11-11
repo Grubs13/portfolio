@@ -1,6 +1,6 @@
 import { Box3, Color, Float32BufferAttribute, Group, Mesh, type MeshStandardMaterial, type Object3D } from 'three';
 import { buildCharacter, type Character, CHARACTER_POSES, type CharacterPose, CHARACTER_SCALE } from './character';
-import { smoothMaterial } from './materials';
+import { litMaterial } from './materials';
 import { sceneLoader } from './sceneModel';
 
 /**
@@ -23,7 +23,10 @@ export const CHARACTER_MODEL: CharacterModel | null = {
   height: 2.3 * CHARACTER_SCALE,
 };
 
-/** Bakes each mesh's base color into vertex colors, the shape every lit shader here expects. */
+/**
+ * Bakes each mesh's base color into vertex colors, the shape every lit shader here expects, and
+ * shades it with the faceted scene shader, so Calen reads like the crews he works among.
+ */
 function paintVertices(mesh: Mesh) {
   const material = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as MeshStandardMaterial | undefined;
   // glTF colors are linear and this world works in display space throughout.
@@ -32,7 +35,7 @@ function paintVertices(mesh: Mesh) {
   const colors = new Float32Array(mesh.geometry.getAttribute('position').count * 3);
   for (let i = 0; i < colors.length; i += 3) colors.set([r, g, b], i);
   mesh.geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
-  mesh.material = smoothMaterial;
+  mesh.material = litMaterial;
 }
 
 /**
