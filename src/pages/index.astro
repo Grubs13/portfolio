@@ -284,6 +284,11 @@ const contactId = scenes.find((s) => s.kind === 'contact')?.id;
       max-width: min(var(--measure), 46vw);
       margin-inline: 0;
     }
+
+    /* Panels alternate sides down the page, so each scene's subject sits in the other half. */
+    .world .scene:nth-child(even) {
+      margin-inline-start: auto;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
