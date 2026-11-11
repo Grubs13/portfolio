@@ -7,13 +7,15 @@
 # The body is one continuous mesh grown from a stick skeleton by Blender's Skin
 # modifier and smoothed, so shoulders, the chest-to-waist taper, elbows, knees and
 # boots blend like the chunky brawlers in the style references. Clothing is painted
-# onto it by region. Head, hands and gear are modelled separately. No rig: he holds
-# one standing pose. Built in Blender's axes: z up, facing -y. Run inside Blender
-# with DIR set to this folder:
+# onto it by region. Head, hands and gear are modelled separately, each riding a
+# joint of the skeleton. No rig: each pose in `POSES` turns joints, the body and
+# parts are built once per pose, and each pose's meshes are exported under an
+# empty named `pose_<name>`, which the site shows one at a time. Built in
+# Blender's axes: z up, facing -y. Run inside Blender with DIR set to this folder:
 #   exec(open(f'{DIR}/character.py').read(), {'DIR': DIR})
 import io, contextlib, math, os
 import bpy, bmesh
-from mathutils import Matrix, Vector
+from mathutils import Euler, Matrix, Vector
 
 COLORS = {
     'navy': 0x26325a, 'navyDark': 0x1d2747, 'hiVis': 0xd4f03a, 'reflective': 0xc5ccd6, 'skin': 0xe3b48d,
@@ -118,10 +120,48 @@ def body_paint(c):
     if 1.56 < z < 1.64 and ax < 0.045 and y < -0.06: return 'undershirt'
     return 'navy'
 
-def body(collection):
+# ---- poses ----
+
+# A pose turns joints by Euler angles (x, y, z) in radians, about Blender's axes as the
+# parent joint carries them, and a turn at a joint swings everything below it in `BONES`.
+# Facing -y, a positive x turn tips an upright bone forward and swings a hanging one back.
+POSES = {
+    'stand': {},
+    # Kneeling on his right knee with the toes tucked, leaning in to a flange face: a
+    # flashlight raised in his left hand, the right hand reaching forward palm out, the head down.
+    'inspect': {
+        'pelvis': (0.6, 0, 0), 'neckTop': (-0.15, 0, 0),
+        'hipR': (-0.55, 0, 0.05), 'kneeR': (1.75, 0, 0), 'ankleR': (-0.2, 0, 0),
+        'hipL': (-2.3, 0, -0.12), 'kneeL': (1.7, 0, 0),
+        'shoulderL': (-1.95, 0, -0.3), 'elbowL': (-0.35, 0, 0), 'wristL': (0.15, 0, 0),
+        'shoulderR': (-1.75, 0, 0.2), 'elbowR': (-0.1, 0, 0), 'wristR': (1.2, 0, 0),
+    },
+}
+PARENT = {b: a for a, b in BONES}
+
+def pose_matrices(pose):
+    """Each joint's posed rigid transform, by forward kinematics from the pelvis down `BONES`.
+    It carries a point riding that joint from where it sits at rest to where it sits posed."""
+    G = {}
+    for name in ['pelvis', *PARENT]:
+        rest = Vector(JOINTS[name][0])
+        turn = Euler(pose.get(name, (0, 0, 0)), 'XYZ').to_matrix().to_4x4()
+        G[name] = G.get(PARENT.get(name), Matrix.Identity(4)) @ Matrix.Translation(rest) @ turn @ Matrix.Translation(-rest)
+    return G
+
+def rest_point(G, p):
+    """Where a point of the posed body sat at rest, pulled back through the bone nearest to it."""
+    def distance(bone):
+        a, b = (G[bone[0]] @ Vector(JOINTS[j][0]) for j in bone)
+        t = max(0.0, min(1.0, (p - a).dot(b - a) / (b - a).length_squared))
+        return (a.lerp(b, t) - p).length
+    return G[min(BONES, key=distance)[0]].inverted() @ p
+
+def body(collection, G=None):
     me = bpy.data.meshes.new('skeleton')
     names = list(JOINTS)
-    me.from_pydata([JOINTS[n][0] for n in names], [(names.index(a), names.index(b)) for a, b in BONES], [])
+    joint = (lambda n: JOINTS[n][0]) if G is None else (lambda n: G[n] @ Vector(JOINTS[n][0]))
+    me.from_pydata([joint(n) for n in names], [(names.index(a), names.index(b)) for a, b in BONES], [])
     ob = bpy.data.objects.new('skeleton', me)
     collection.objects.link(ob)
     skin = ob.modifiers.new('skin', 'SKIN')
@@ -132,7 +172,9 @@ def body(collection):
     # Fine enough that the painted stripes and bands keep straight edges.
     ob.modifiers.new('smooth', 'SUBSURF').levels = 3
     bm = evaluated(ob)
-    for f in bm.faces: f.material_index = BODY_PAINTS.index(body_paint(f.calc_center_median()))
+    # Painted where each face sat at rest, so the bands stay put on the limbs in any pose.
+    rest = (lambda c: c) if G is None else (lambda c: rest_point(G, c))
+    for f in bm.faces: f.material_index = BODY_PAINTS.index(body_paint(rest(f.calc_center_median())))
     return mesh_object('calen_body', bm, collection, BODY_PAINTS)
 
 # ---- head ----
@@ -214,16 +256,28 @@ def hand(collection, side):
         bmesh.ops.create_cone(w, cap_ends=True, segments=14, radius1=0.068, radius2=0.068, depth=0.035)
         bmesh.ops.transform(w, matrix=Matrix.Translation((wx, wy, wz + 0.03)), verts=w.verts)
         made.append(mesh_object('calen_watch', w, collection, ['reflective']))
+    return [(f'wrist{side}', ob) for ob in made]
+
+def flashlight(collection):
+    """A black flashlight gripped in the left fist, its body along the hand and the lens past the fingertips."""
+    wx, wy, wz = JOINTS['wristL'][0]
+    made = []
+    for name, paint, r1, r2, z0, z1 in (('flashlight', 'black', 0.034, 0.034, 0.64, 0.98), ('bezel', 'black', 0.052, 0.036, 0.58, 0.64),
+                                        ('flashlightLens', 'lamp', 0.042, 0.042, 0.574, 0.582)):
+        b = bmesh.new()
+        bmesh.ops.create_cone(b, cap_ends=True, segments=12, radius1=r1, radius2=r2, depth=z1 - z0)
+        bmesh.ops.transform(b, matrix=Matrix.Translation((wx + 0.005, wy - 0.03, (z0 + z1) / 2)), verts=b.verts)
+        made.append(('wristL', mesh_object(name, b, collection, [paint])))
     return made
 
 def gear(collection):
     """Chest harness with radio and gas detector, name tag, crest, and the hip radio."""
     made = []
-    def box(name, paint, c, size, sub=0):
+    def box(name, paint, c, size, sub=0, joint='chest'):
         b = bmesh.new(); bmesh.ops.create_cube(b, size=1)
         bmesh.ops.transform(b, matrix=Matrix.Translation(c) @ Matrix.Diagonal((*size, 1)), verts=b.verts)
         if sub: b = smoothed(collection, b, sub)
-        made.append(mesh_object(name, b, collection, [paint], smooth=bool(sub)))
+        made.append((joint, mesh_object(name, b, collection, [paint], smooth=bool(sub))))
     for s in (-1, 1):
         # Straps down the front, over the shoulder and down the back.
         box('strap', 'black', (s * 0.2, -0.175, 1.33), (0.055, 0.03, 0.42))
@@ -237,17 +291,35 @@ def gear(collection):
     box('led', 'detectorLed', (0.21, -0.248, 1.355), (0.04, 0.01, 0.018))
     box('nameTag', 'tube', (-0.11, -0.185, 1.43), (0.1, 0.01, 0.045))
     box('crest', 'pipeBlue', (0.1, -0.18, 1.44), (0.07, 0.01, 0.05))
-    box('hipRadio', 'black', (-0.27, -0.06, 1.01), (0.06, 0.09, 0.16), 1)
-    box('hipRadioFace', 'pipeBlue', (-0.302, -0.06, 1.01), (0.01, 0.07, 0.1))
+    box('hipRadio', 'black', (-0.27, -0.06, 1.01), (0.06, 0.09, 0.16), 1, 'pelvis')
+    box('hipRadioFace', 'pipeBlue', (-0.302, -0.06, 1.01), (0.01, 0.07, 0.1), 0, 'pelvis')
     for z in (1.5, 1.45): box('button', 'hair', (0, -0.172, z), (0.025, 0.01, 0.025))
     # Work boots over the feet: a rounded toe cap, the shaft, a darker welt and sole, laces.
-    for s in (-1, 1):
+    for s, side in ((-1, 'R'), (1, 'L')):
         x = s * 0.14
-        box('boot', 'boots', (x, -0.05, 0.1), (0.22, 0.36, 0.17), 2)
-        box('boot', 'boots', (x, 0.01, 0.2), (0.21, 0.22, 0.17), 2)
-        box('sole', 'sole', (x, -0.05, 0.03), (0.225, 0.365, 0.05), 1)
-        box('laces', 'bootsDark', (x, -0.11, 0.2), (0.07, 0.09, 0.01))
+        box('boot', 'boots', (x, -0.05, 0.1), (0.22, 0.36, 0.17), 2, f'ankle{side}')
+        box('boot', 'boots', (x, 0.01, 0.2), (0.21, 0.22, 0.17), 2, f'ankle{side}')
+        box('sole', 'sole', (x, -0.05, 0.03), (0.225, 0.365, 0.05), 1, f'ankle{side}')
+        box('laces', 'bootsDark', (x, -0.11, 0.2), (0.07, 0.09, 0.01), 0, f'ankle{side}')
     return made
+
+def lowest(obs):
+    return min((ob.matrix_world @ v.co).z for ob in obs for v in ob.data.vertices)
+
+def posed(col, name):
+    """Calen in pose `name`, under an empty `pose_<name>`. Each part is built at rest and carried
+    by its joint's posed transform, and the pose is set on the ground where the standing pose stands."""
+    pose = POSES[name]
+    G = pose_matrices(pose) if pose else None
+    riders = [*(('neckTop', ob) for ob in head(col)), *hand(col, 'R'), *hand(col, 'L'), *gear(col)]
+    if name == 'inspect': riders += flashlight(col)
+    if G:
+        for joint, ob in riders: ob.data.transform(G[joint])
+    obs = [body(col, G), *(ob for _, ob in riders)]
+    root = bpy.data.objects.new(f'pose_{name}', None)
+    col.objects.link(root)
+    for ob in obs: ob.parent = root
+    return root, obs
 
 def run(DIR):
     for ob in list(bpy.data.objects): bpy.data.objects.remove(ob)
@@ -255,7 +327,14 @@ def run(DIR):
         for x in list(coll): coll.remove(x)
     for c in list(bpy.data.collections): bpy.data.collections.remove(c)
     col = bpy.data.collections.new('calen'); bpy.context.scene.collection.children.link(col)
-    obs = [body(col), *head(col), *hand(col, 'R'), *hand(col, 'L'), *gear(col)]
+    obs = []
+    ground = None
+    for name in POSES:
+        _, made = posed(col, name)
+        low = lowest(made)
+        if ground is None: ground = low
+        for ob in made: ob.data.transform(Matrix.Translation((0, 0, ground - low)))
+        obs += made
     os.makedirs(f'{DIR}/out', exist_ok=True)
     path = f'{DIR}/out/calen.glb'
     bpy.ops.object.select_all(action='DESELECT')
