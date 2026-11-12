@@ -96,7 +96,7 @@ export const scenes: readonly Scene[] = [
   {
     kind: 'contact',
     id: 'contact',
-    email: 'hello@example.com',
+    email: 'hello@calengruber.com',
     links: [{ label: 'LinkedIn', href: 'https://www.linkedin.com/in/calen-gruber-p-eng-74a054103' }],
   },
 ];
