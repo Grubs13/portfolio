@@ -358,11 +358,11 @@ const contactId = scenes.find((s) => s.kind === 'contact')?.id;
       font-size: 2rem;
     }
 
-    .panel ul {
+    .panel ul:not(.links) {
       padding-left: 1.1rem;
     }
 
-    .panel li + li {
+    .panel ul:not(.links) li + li {
       margin-top: 0.35rem;
     }
   }
