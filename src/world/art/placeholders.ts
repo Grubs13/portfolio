@@ -1,4 +1,4 @@
-import { IcosahedronGeometry, Matrix4 } from 'three';
+import { Group, IcosahedronGeometry, Matrix4 } from 'three';
 import type { Scene } from '../../content/scenes';
 import { DEFAULT_LOOK, type StageBuilder, stageGround } from './kit';
 import { MergedModel } from './merged';
@@ -17,7 +17,8 @@ function stage(props: (model: MergedModel) => MergedModel = (m) => m) {
 /** Stand-ins for scenes that have no art of their own yet. */
 // Props sit toward -x, to the character's screen-left, so they never hide it or sit on its head.
 export const PLACEHOLDERS: Record<Scene['kind'], StageBuilder> = {
-  intro: () => stage(),
+  // The opening is the page's title alone: no ground and no character, so the first scene wipes in out of the dark.
+  intro: () => ({ object: new Group(), look: DEFAULT_LOOK, cast: null }),
   contact: () => stage(),
   role: () =>
     stage((m) =>

@@ -104,7 +104,7 @@ export function createStage(
 
   const world = new ThreeScene();
   const looks: Vector3[] = [];
-  const casts: Cast[] = [];
+  const casts: (Cast | null)[] = [];
   const frames: number[] = [];
   scenes.forEach((scene, i) => {
     const anchor = layout.anchors[i]!;
@@ -160,10 +160,13 @@ export function createStage(
   function draw(i: number, side: 0 | 1): number {
     const unit = frame(focuses[i] ?? { x: 0.5, y: 0.5 }, frames[i]!);
     const anchor = layout.anchors[i]!;
-    const cast = casts[i]!;
+    const cast = casts[i] ?? null;
+    character.root.visible = cast !== null;
     character.root.position.set(anchor.x, anchor.y, anchor.z);
-    character.root.rotation.y = cast.yaw;
-    character.pose(cast.pose);
+    if (cast) {
+      character.root.rotation.y = cast.yaw;
+      character.pose(cast.pose);
+    }
     look.set(anchor.x, anchor.y, anchor.z).add(looks[i]!);
     // Snapped to whole art pixels and whole shadow texels, so the picture is the same every time the scene is shown.
     aimSnapped(camera, look, ISO_DIRECTION, CAMERA_DISTANCE, unit);
