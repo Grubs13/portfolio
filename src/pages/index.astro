@@ -5,6 +5,8 @@ import LinkList from '../components/LinkList.astro';
 import { scenes } from '../content/scenes';
 
 const contactId = scenes.find((s) => s.kind === 'contact')?.id;
+// The header shows a Résumé link once this points at a file, such as '/resume.pdf' in public/.
+const resumeUrl: string | null = null;
 ---
 
 <!doctype html>
@@ -32,7 +34,7 @@ const contactId = scenes.find((s) => s.kind === 'contact')?.id;
     <canvas class="world-canvas" aria-hidden="true"></canvas>
     <header class="site-header">
       {contactId && <a class="skip-link" href={`#${contactId}`}>Skip to contact</a>}
-      <a href="#">Résumé</a>
+      {resumeUrl && <a href={resumeUrl}>Résumé</a>}
     </header>
     <main>
       {
