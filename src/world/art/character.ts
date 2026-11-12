@@ -12,7 +12,7 @@ import { palette, type Paint } from './palette';
 // them (see `model.ts`); both satisfy `Character`.
 
 /** The poses the modelled character is exported in, as `pose_<name>` groups of `calen.glb`. */
-export const CHARACTER_POSES = ['stand', 'inspect'] as const;
+export const CHARACTER_POSES = ['stand', 'inspect', 'sit'] as const;
 export type CharacterPose = (typeof CHARACTER_POSES)[number];
 
 export interface Character {

@@ -91,6 +91,12 @@ POSES = {
         'shoulderL': (-1.95, 0, -0.3), 'elbowL': (-0.35, 0, 0), 'wristL': (0.15, 0, 0),
         'shoulderR': (-1.75, 0, 0.2), 'elbowR': (-0.1, 0, 0), 'wristR': (1.2, 0, 0),
     },
+    # Seated at a desk: hips and knees at right angles, forearms forward to a keyboard and mouse.
+    'sit': {
+        'hipR': (-1.55, 0, 0.06), 'kneeR': (1.55, 0, 0), 'hipL': (-1.55, 0, -0.06), 'kneeL': (1.55, 0, 0),
+        'shoulderR': (-0.55, 0, 0.12), 'elbowR': (-1.0, 0, 0), 'shoulderL': (-0.55, 0, -0.12), 'elbowL': (-1.0, 0, 0),
+        'neckTop': (0.05, 0, 0),
+    },
 }
 def body(collection, G=None):
     bm = skin_body(collection, G, 2, lambda c: BODY_PAINTS.index(body_paint(c)))
@@ -102,10 +108,10 @@ HEAD_PAINTS = ['skin', 'stubble', 'hair']
 HEAD_C = Vector((0, 0, 1.87))
 HEAD_SIZE = Vector((0.19, 0.2, 0.22))
 
-def head(collection):
+def head(collection, hat=True):
     """The head: skin in front, stubble along the jaw, brown hair at the back and sides under the hat,
     with a nose, ears, thick black frames, a navy toque edge and the white hard hat with its teal strap
-    and headlamp."""
+    and headlamp. Without the hat, at his desk, his hair covers the crown instead."""
     bm = bmesh.new()
     bmesh.ops.create_uvsphere(bm, u_segments=12, v_segments=8, radius=1)
     bmesh.ops.transform(bm, matrix=Matrix.Translation(HEAD_C) @ Matrix.Diagonal((*HEAD_SIZE, 1)), verts=bm.verts)
@@ -134,6 +140,13 @@ def head(collection):
         part('lens', 'lens', cube, T(x, -0.2035, 0.03, 0.074, 0.004, 0.05))
     part('bridge', 'black', cube, T(0, -0.19, 0.045, 0.05, 0.02, 0.02))
     for x in (-0.19, 0.19): part('temple', 'black', cube, T(x, -0.1, 0.045, 0.02, 0.18, 0.02))
+    if not hat:
+        crown = bmesh.new()
+        bmesh.ops.create_uvsphere(crown, u_segments=12, v_segments=8, radius=1)
+        bmesh.ops.delete(crown, geom=[v for v in crown.verts if v.co.z < 0.15 or (v.co.y < -0.55 and v.co.z < 0.6)], context='VERTS')
+        bmesh.ops.transform(crown, matrix=T(0, 0.01, 0.0, HEAD_SIZE.x + 0.015, HEAD_SIZE.y + 0.015, HEAD_SIZE.z + 0.02), verts=crown.verts)
+        made.append(mesh_object('hairCrown', crown, collection, ['hair'], smooth=False))
+        return made
     # The toque edge, a snug dome with a brim, the teal strap round the dome and the headlamp on it.
     part('toque', 'toque', disc(12), T(0, 0.0, 0.055, 0.195, 0.205, 0.04))
     dome = bmesh.new()
@@ -208,7 +221,7 @@ def posed(col, name):
     by its joint's posed transform, and the pose is set on the ground where the standing pose stands."""
     pose = POSES[name]
     G = pose_matrices(pose) if pose else None
-    riders = [*(('neckTop', ob) for ob in head(col)), *hand(col, 'R'), *hand(col, 'L'), *gear(col)]
+    riders = [*(('neckTop', ob) for ob in head(col, hat=name != 'sit')), *hand(col, 'R'), *hand(col, 'L'), *gear(col)]
     if name == 'inspect': riders += flashlight(col)
     for joint, ob in riders: ob.data.transform(rider(G, joint))
     obs = [body(col, G), *(ob for _, ob in riders)]
