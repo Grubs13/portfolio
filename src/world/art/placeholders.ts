@@ -14,12 +14,15 @@ function stage(props: (model: MergedModel) => MergedModel = (m) => m) {
   return { object: ground.build(), look: DEFAULT_LOOK };
 }
 
+/** No ground and no character, so the scene is the dark backdrop alone. */
+const empty: StageBuilder = () => ({ object: new Group(), look: DEFAULT_LOOK, cast: null });
+
 /** Stand-ins for scenes that have no art of their own yet. */
 // Props sit toward -x, to the character's screen-left, so they never hide it or sit on its head.
 export const PLACEHOLDERS: Record<Scene['kind'], StageBuilder> = {
-  // The opening is the page's title alone: no ground and no character, so the first scene wipes in out of the dark.
-  intro: () => ({ object: new Group(), look: DEFAULT_LOOK, cast: null }),
-  contact: () => stage(),
+  // The page opens and closes on the dark: the first scene wipes in out of it and the last wipes back into it.
+  intro: empty,
+  contact: empty,
   role: () =>
     stage((m) =>
       m
