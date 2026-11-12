@@ -50,7 +50,6 @@ const contactId = scenes.find((s) => s.kind === 'contact')?.id;
                   <p class="eyebrow">Role</p>
                   <h2 id={`${scene.id}-heading`}>{scene.title}</h2>
                   <p class="meta">{scene.org}</p>
-                  <p>{scene.summary}</p>
                   <ul>
                     {scene.highlights.map((h) => (
                       <li>{h}</li>
@@ -63,7 +62,11 @@ const contactId = scenes.find((s) => s.kind === 'contact')?.id;
                   <p class="eyebrow">Project</p>
                   <h2 id={`${scene.id}-heading`}>{scene.title}</h2>
                   <p class="meta">{scene.org}</p>
-                  <p>{scene.summary}</p>
+                  <ul>
+                    {scene.highlights.map((h) => (
+                      <li>{h}</li>
+                    ))}
+                  </ul>
                   {scene.links.length > 0 && <LinkList links={scene.links} />}
                 </>
               )}
