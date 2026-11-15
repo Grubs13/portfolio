@@ -1,6 +1,7 @@
 ---
 import '@fontsource/jersey-15';
 import '@fontsource-variable/overpass';
+import Analytics from '@vercel/analytics/astro';
 import LinkList from '../components/LinkList.astro';
 import { scenes } from '../content/scenes';
 
@@ -21,6 +22,7 @@ const resumeUrl: string | null = '/Calen_Gruber_Resume.pdf';
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <Analytics />
     <script is:inline>
       if (
         !matchMedia('(prefers-reduced-motion: reduce)').matches &&
