@@ -46,7 +46,8 @@ const IDLE_YAW = Math.PI / 4 + 0.5;
 const IDLE_CAST: Cast = { pose: 'stand', yaw: IDLE_YAW };
 /** CSS pixels per art pixel: chunky enough to read as pixel art, fine enough for the character's detail. */
 const FINE = LOOK !== 'pixel';
-const PIXEL_SIZE = FINE ? 1 / Math.min(globalThis.devicePixelRatio ?? 1, 2) : 2;
+const HD = LOOK === 'hd';
+const PIXEL_SIZE = HD ? 1 : FINE ? 1 / Math.min(globalThis.devicePixelRatio ?? 1, 2) : 2;
 const NEAR = 0.1;
 const FAR = CAMERA_DISTANCE * 5;
 /** Depth steps smaller than this many art pixels are surface slope, not a silhouette. */
@@ -125,7 +126,7 @@ export function createStage(
   const depthOnly = new MeshBasicMaterial({ colorWrite: false });
   shadowUniforms.tShadow.value = shadowTarget.depthTexture;
   shadowUniforms.shadowTexel.value = 1 / SHADOW_SIZE;
-  if (FINE) canvas.style.imageRendering = 'auto';
+  if (FINE && !HD) canvas.style.imageRendering = 'auto';
   shadowUniforms.shadowBias.value = (2.5 * (2 * SHADOW_REACH)) / SHADOW_SIZE / (SHADOW_DEPTH - 1);
 
   const post = new ThreeScene();

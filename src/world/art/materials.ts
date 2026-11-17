@@ -4,7 +4,7 @@ import { LOOK_ID } from '../look';
 const DEFINES = `#define LOOK ${LOOK_ID}\n`;
 
 /** Where sunlight comes from. The lit shader and the shadow camera share it. */
-export const SUN = new Vector3(-0.4, 0.82, 0.48).normalize();
+export const SUN = (LOOK_ID === 3 ? new Vector3(-0.62, 0.5, 0.42) : new Vector3(-0.4, 0.82, 0.48)).normalize();
 
 // A 4x4 ordered-dither threshold for the current art pixel, in (0, 1).
 const BAYER = /* glsl */ `
@@ -239,7 +239,13 @@ void main() {
   // Sunlit ground throws a little warm light back up under things.
   vec3 bounce = vec3(0.30, 0.24, 0.16) * max(-n.y * 0.6 + 0.25, 0.) * (1. - abs(n.y));
   vec3 albedo = ${smooth ? 'vColor' : 'fineTexture(vColor, n, int(vSurface + 0.5))'};
+#if LOOK == 3
+  // Late sun: warm and strong, with dim blue-violet sky light filling the shade.
+  sky = mix(vec3(0.20, 0.19, 0.34), vec3(0.36, 0.44, 0.70), n.y * 0.5 + 0.5);
+  vec3 c = albedo * (sky * 0.62 + bounce * 1.3 + vec3(1.25, 0.92, 0.58) * 0.95 * direct);
+#else
   vec3 c = albedo * (sky * 0.68 + bounce + vec3(1.0, 0.9, 0.72) * 0.7 * direct);
+#endif
   vec3 h = normalize(sun + vec3(0.577));
   c += vec3(1., 0.95, 0.85) * pow(max(dot(n, h), 0.), 48.) * 0.22 * direct;
   gl_FragColor = vec4(c, 1.);
@@ -388,7 +394,17 @@ vec4 inked(float side, vec2 screen) {
     max(depthAt(uv + vec2(0., texel.y) * w, lo, hi), depthAt(uv - vec2(0., texel.y) * w, lo, hi))
   );
   float outline = smoothstep(limit * 2., limit * 6., max(far, farWide) - d);
-#if LOOK == 1
+#if LOOK == 3
+  c.rgb *= mix(vec3(0.28, 0.24, 0.42), vec3(1.), ao);
+  c.rgb = mix(c.rgb, INK, outline * 0.55);
+  // Filmic contrast, then a small palette: each channel snaps to 24 steps with ordered dither, so gradients band like painted pixel art.
+  c.rgb = c.rgb / (c.rgb + 0.85) * 1.72;
+  c.rgb = mix(c.rgb, c.rgb * c.rgb * (3. - 2. * c.rgb), 0.55);
+  vec2 cell = mod(floor(gl_FragCoord.xy), 2.);
+  float bayer = (cell.x * 2. + cell.y * 3. - cell.x * cell.y * 4. + 0.5) / 4. - 0.5;
+  c.rgb = floor(c.rgb * 24. + 0.5 + bayer * 0.9) / 24.;
+  return c;
+#elif LOOK == 1
   c.rgb *= mix(vec3(0.42, 0.36, 0.5), vec3(1.), ao);
   c.rgb = mix(c.rgb, c.rgb * 0.35, outline * 0.6);
   // A gentle filmic curve and a touch of warmth in the lights.
