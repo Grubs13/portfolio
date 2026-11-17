@@ -7,29 +7,30 @@
 import bpy, bmesh
 from mathutils import Euler, Matrix, Vector
 
-# Skeleton joints: name -> (position, (radius across, radius front-to-back)).
+# Skeleton joints, in metres for a 1.8 m adult: name -> (position, (radius across, radius front-to-back)).
+# The radii are of the clothed body, so sleeves and trouser legs hang straight.
 JOINTS = {
-    'pelvis': ((0, 0, 0.98), (0.2, 0.14)),
-    'waist': ((0, 0, 1.12), (0.21, 0.15)),
-    'chest': ((0, -0.01, 1.34), (0.26, 0.17)),
-    'upper': ((0, 0, 1.5), (0.27, 0.16)),
-    'neckBase': ((0, 0.01, 1.63), (0.11, 0.1)),
-    'neckTop': ((0, 0.01, 1.7), (0.09, 0.09)),
+    'pelvis': ((0, 0, 0.95), (0.16, 0.115)),
+    'waist': ((0, 0.005, 1.1), (0.146, 0.106)),
+    'chest': ((0, -0.005, 1.27), (0.164, 0.122)),
+    'upper': ((0, 0, 1.41), (0.15, 0.108)),
+    'neckBase': ((0, 0.012, 1.505), (0.068, 0.066)),
+    'neckTop': ((0, 0.004, 1.575), (0.058, 0.06)),
 }
 for side, s in (('R', -1), ('L', 1)):
     JOINTS.update({
-        f'shoulder{side}': ((s * 0.29, 0, 1.53), (0.115, 0.11)),
-        f'bicep{side}': ((s * 0.36, 0.0, 1.38), (0.095, 0.095)),
-        f'elbow{side}': ((s * 0.39, 0.02, 1.22), (0.075, 0.075)),
-        f'forearm{side}': ((s * 0.405, 0.0, 1.1), (0.08, 0.075)),
-        f'wrist{side}': ((s * 0.41, -0.02, 0.99), (0.06, 0.055)),
-        f'hip{side}': ((s * 0.12, 0, 0.9), (0.125, 0.125)),
-        f'thigh{side}': ((s * 0.13, 0, 0.72), (0.115, 0.115)),
-        f'knee{side}': ((s * 0.135, -0.01, 0.52), (0.09, 0.095)),
-        f'calf{side}': ((s * 0.135, 0.01, 0.36), (0.095, 0.095)),
-        f'ankle{side}': ((s * 0.135, 0.0, 0.18), (0.1, 0.1)),
-        f'heel{side}': ((s * 0.135, 0.04, 0.08), (0.1, 0.085)),
-        f'toe{side}': ((s * 0.14, -0.15, 0.07), (0.095, 0.075)),
+        f'shoulder{side}': ((s * 0.178, 0, 1.445), (0.068, 0.066)),
+        f'bicep{side}': ((s * 0.208, 0.005, 1.3), (0.056, 0.058)),
+        f'elbow{side}': ((s * 0.222, 0.015, 1.14), (0.048, 0.05)),
+        f'forearm{side}': ((s * 0.23, 0.0, 1.03), (0.046, 0.045)),
+        f'wrist{side}': ((s * 0.236, -0.02, 0.9), (0.036, 0.033)),
+        f'hip{side}': ((s * 0.09, 0, 0.9), (0.098, 0.104)),
+        f'thigh{side}': ((s * 0.096, -0.005, 0.72), (0.088, 0.094)),
+        f'knee{side}': ((s * 0.1, -0.012, 0.5), (0.072, 0.076)),
+        f'calf{side}': ((s * 0.1, 0.012, 0.36), (0.07, 0.074)),
+        f'ankle{side}': ((s * 0.1, 0.01, 0.13), (0.066, 0.07)),
+        f'heel{side}': ((s * 0.1, 0.035, 0.05), (0.05, 0.048)),
+        f'toe{side}': ((s * 0.105, -0.16, 0.045), (0.052, 0.04)),
     })
 BONES = [('pelvis', 'waist'), ('waist', 'chest'), ('chest', 'upper'), ('upper', 'neckBase'), ('neckBase', 'neckTop')]
 for side in 'RL':
@@ -84,13 +85,14 @@ def rider(G, joint):
 
 # ---- body ----
 
-def skin_body(collection, G, levels, paint_index):
+def skin_body(collection, G, levels, paint_index, skip=()):
     """The body grown over the skeleton posed by `G` (at rest when None) and smoothed `levels`
-    times, as a bmesh whose faces carry `paint_index(rest position)` as their material index."""
+    times, as a bmesh whose faces carry `paint_index(rest position)` as their material index.
+    Joints named in `skip` are left out, for parts modelled separately."""
     me = bpy.data.meshes.new('skeleton')
-    names = list(JOINTS)
+    names = [n for n in JOINTS if n not in skip]
     joint = (lambda n: JOINTS[n][0]) if G is None else (lambda n: G[n] @ Vector(JOINTS[n][0]))
-    me.from_pydata([joint(n) for n in names], [(names.index(a), names.index(b)) for a, b in BONES], [])
+    me.from_pydata([joint(n) for n in names], [(names.index(a), names.index(b)) for a, b in BONES if a in names and b in names], [])
     ob = bpy.data.objects.new('skeleton', me)
     collection.objects.link(ob)
     skin = ob.modifiers.new('skin', 'SKIN')

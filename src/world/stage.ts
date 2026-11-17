@@ -20,6 +20,7 @@ import type { Character } from './art/character';
 import type { Cast, StageBuilder } from './art/kit';
 import { screenMaterial, shadowUniforms, SUN } from './art/materials';
 import type { WorldLayout } from './layout';
+import { LOOK } from './look';
 
 /** Where on screen the subject is framed, as fractions of width and of height from the top. */
 export interface Focus {
@@ -44,14 +45,16 @@ const IDLE_YAW = Math.PI / 4 + 0.5;
 /** How the character stands in a scene whose stage does not cast it. */
 const IDLE_CAST: Cast = { pose: 'stand', yaw: IDLE_YAW };
 /** CSS pixels per art pixel: chunky enough to read as pixel art, fine enough for the character's detail. */
-const PIXEL_SIZE = 2;
+const FINE = LOOK !== 'pixel';
+const HD = LOOK === 'hd' || LOOK === 'game';
+const PIXEL_SIZE = LOOK === 'game' ? 1.5 : HD ? 1 : FINE ? 1 / Math.min(globalThis.devicePixelRatio ?? 1, 2) : 2;
 const NEAR = 0.1;
 const FAR = CAMERA_DISTANCE * 5;
 /** Depth steps smaller than this many art pixels are surface slope, not a silhouette. */
 const OUTLINE_PIXELS = 3;
 /** Half the width of ground the shadow map covers around the character, and its resolution. */
 const SHADOW_REACH = 44;
-const SHADOW_SIZE = 1024;
+const SHADOW_SIZE = FINE ? 4096 : 1024;
 const SHADOW_DEPTH = 300;
 /** The scene buffer grows in steps of this many art pixels, so small viewport changes do not reallocate it. */
 const BUFFER_STEP = 64;
@@ -122,6 +125,8 @@ export function createStage(
   const shadowTarget = new WebGLRenderTarget(SHADOW_SIZE, SHADOW_SIZE, { depthTexture: new DepthTexture(SHADOW_SIZE, SHADOW_SIZE) });
   const depthOnly = new MeshBasicMaterial({ colorWrite: false });
   shadowUniforms.tShadow.value = shadowTarget.depthTexture;
+  shadowUniforms.shadowTexel.value = 1 / SHADOW_SIZE;
+  if (FINE && !HD) canvas.style.imageRendering = 'auto';
   shadowUniforms.shadowBias.value = (2.5 * (2 * SHADOW_REACH)) / SHADOW_SIZE / (SHADOW_DEPTH - 1);
 
   const post = new ThreeScene();
@@ -133,6 +138,8 @@ export function createStage(
   const uniforms = screenMaterial.uniforms;
   uniforms.tColor!.value = buffer.texture;
   uniforms.tDepth!.value = buffer.depthTexture;
+  uniforms.depthRange!.value = FAR - NEAR;
+  uniforms.scale!.value = FINE ? 1 / PIXEL_SIZE : 1;
 
   const camera = new OrthographicCamera(-1, 1, 1, -1, NEAR, FAR);
   const look = new Vector3();
@@ -207,11 +214,17 @@ export function createStage(
     render(state) {
       // Each half gets its own outline threshold, since the two scenes in a wipe can be framed at different scales.
       const threshold = (unit: number) => (OUTLINE_PIXELS * unit) / (FAR - NEAR);
+      const AO_REACH = 0.9;
       if (state.phase === 'dwell') {
-        uniforms.threshold!.value.setScalar(threshold(draw(state.scene, 0)));
+        const unit = draw(state.scene, 0);
+        uniforms.threshold!.value.setScalar(threshold(unit));
+        uniforms.aoRadius!.value.setScalar(AO_REACH / unit);
         uniforms.progress!.value = 0;
       } else {
-        uniforms.threshold!.value.set(threshold(draw(state.from, 0)), threshold(draw(state.to, 1)));
+        const a = draw(state.from, 0);
+        const b = draw(state.to, 1);
+        uniforms.threshold!.value.set(threshold(a), threshold(b));
+        uniforms.aoRadius!.value.set(AO_REACH / a, AO_REACH / b);
         uniforms.progress!.value = state.t;
       }
       renderer.setRenderTarget(null);

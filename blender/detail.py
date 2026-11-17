@@ -85,53 +85,58 @@ SET_SCALE = 1.0
 WORKER_DETAIL = 'full'
 # A worker's height to the top of the hard hat, standing, at SET_SCALE 1.
 WORKER_HEIGHT = 1.95
-HEAD = Vector((0, 0, 1.86))
+HEAD = Vector((0, -0.012, 1.672))
+HEAD_SIZE = (0.078, 0.098, 0.118)
 
 def worker_region(c):
     """Which part of the outfit covers a point of the body at rest."""
     x, y, z = c
     ax = abs(x)
-    if z < 0.25: return 'boot'
-    if ax < 0.3 and z < 0.95: return 'legBand' if 0.3 < z < 0.4 else 'coverall'
-    if ax >= 0.3: return 'armBand' if 1.03 < z < 1.1 else 'coverall'
-    if z > 1.64: return 'skin'
-    if 1.14 < z < 1.24: return 'vestBand'
-    if 0.98 < z < 1.6: return 'vest'
+    if z < 0.2: return 'boot'
+    if ax < 0.2 and z < 0.92: return 'legBand' if 0.27 < z < 0.35 else 'coverall'
+    if ax >= 0.185: return 'armBand' if 0.985 < z < 1.045 else 'coverall'
+    if z > 1.52: return 'skin' if ax < 0.09 else 'coverall'
+    if 1.02 < z < 1.09: return 'vestBand'
+    if 0.95 < z < 1.5: return 'vest'
     return 'coverall'
 
 def worker_parts(collection, light=False):
-    """Head, hard hat, glasses and mitten hands at rest, as (region, joint, bmesh). A light worker
+    """Head, hard hat, glasses and hands at rest, as (region, joint, bmesh). A light worker
     keeps only the head and hat, more coarsely divided."""
     parts = []
-    seg = (6, 4) if light else (10, 7)
+    seg = (8, 5) if light else (14, 10)
     def part(region, joint, maker, M, sub=0):
         b = bmesh.new(); maker(b); bmesh.ops.transform(b, matrix=M, verts=b.verts)
         parts.append((region, joint, smoothed(collection, b, sub) if sub else b))
     cube = lambda b: bmesh.ops.create_cube(b, size=1)
     at = lambda c, size: Matrix.Translation(c) @ Matrix.Diagonal((*size, 1))
-    # The head: hair at the back and sides under the hat, the face in front.
-    hair = lambda c: c.y > HEAD.y + 0.03 and c.z > HEAD.z - 0.08
+    # The head: an egg narrowing to the jaw, hair at the back and sides under the hat, the face in front.
+    hair = lambda c: c.y > HEAD.y + 0.02 and c.z > HEAD.z - 0.06
     for region, keep in (('skin', lambda c: not hair(c)), ('hair', hair)):
         b = bmesh.new()
         bmesh.ops.create_uvsphere(b, u_segments=seg[0], v_segments=seg[1], radius=1)
-        bmesh.ops.transform(b, matrix=at(HEAD, (0.17, 0.18, 0.2)), verts=b.verts)
+        for v in b.verts:
+            jaw = max(0.0, -v.co.z)
+            v.co.x *= 1 - 0.17 * jaw ** 2.4
+            if v.co.y > 0: v.co.y *= 1 - 0.42 * jaw ** 1.2
+        bmesh.ops.transform(b, matrix=at(HEAD, HEAD_SIZE), verts=b.verts)
         bmesh.ops.delete(b, geom=[f for f in b.faces if not keep(f.calc_center_median())], context='FACES')
         parts.append((region, 'neckTop', b))
-    if not light: part('skin', 'neckTop', cube, at(HEAD + Vector((0, -0.18, -0.02)), (0.045, 0.05, 0.065)))
-    # A domed hard hat with a brim.
-    ring = 8 if light else 12
+    if not light: part('skin', 'neckTop', cube, at(HEAD + Vector((0, -0.1, -0.03)), (0.024, 0.028, 0.04)))
+    # A domed hard hat with a brim longer at the front.
+    ring = 8 if light else 14
     dome = bmesh.new()
     bmesh.ops.create_uvsphere(dome, u_segments=ring, v_segments=4 if light else 6, radius=1)
     bmesh.ops.delete(dome, geom=[v for v in dome.verts if v.co.z < -1e-4], context='VERTS')
-    bmesh.ops.transform(dome, matrix=at(HEAD + Vector((0, 0, 0.07)), (0.2, 0.215, 0.17)), verts=dome.verts)
+    bmesh.ops.transform(dome, matrix=at(HEAD + Vector((0, 0.002, 0.05)), (0.104, 0.124, 0.09)), verts=dome.verts)
     parts.append(('hat', 'neckTop', dome))
     part('hat', 'neckTop', lambda b: bmesh.ops.create_cone(b, cap_ends=True, segments=ring, radius1=1, radius2=1, depth=1),
-         at(HEAD + Vector((0, -0.03, 0.075)), (0.245, 0.27, 0.03)))
+         at(HEAD + Vector((0, -0.022, 0.054)), (0.115, 0.15, 0.01)))
     if light: return parts
-    for s in (-1, 1): part('glasses', 'neckTop', cube, at(HEAD + Vector((s * 0.068, -0.168, 0.03)), (0.085, 0.025, 0.05)))
+    for s in (-1, 1): part('glasses', 'neckTop', cube, at(HEAD + Vector((s * 0.033, -0.099, 0.012)), (0.046, 0.012, 0.03)))
     for side in 'RL':
         wx, wy, wz = JOINTS[f'wrist{side}'][0]
-        part('hand', f'wrist{side}', cube, at(Vector((wx, wy - 0.01, wz - 0.06)), (0.14, 0.17, 0.21)), 1)
+        part('hand', f'wrist{side}', cube, at(Vector((wx, wy - 0.006, wz - 0.085)), (0.04, 0.085, 0.17)), 1)
     return parts
 
 def to_three(bm, M):
