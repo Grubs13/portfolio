@@ -46,8 +46,8 @@ const IDLE_YAW = Math.PI / 4 + 0.5;
 const IDLE_CAST: Cast = { pose: 'stand', yaw: IDLE_YAW };
 /** CSS pixels per art pixel: chunky enough to read as pixel art, fine enough for the character's detail. */
 const FINE = LOOK !== 'pixel';
-const HD = LOOK === 'hd';
-const PIXEL_SIZE = HD ? 1 : FINE ? 1 / Math.min(globalThis.devicePixelRatio ?? 1, 2) : 2;
+const HD = LOOK === 'hd' || LOOK === 'game';
+const PIXEL_SIZE = LOOK === 'game' ? 1.5 : HD ? 1 : FINE ? 1 / Math.min(globalThis.devicePixelRatio ?? 1, 2) : 2;
 const NEAR = 0.1;
 const FAR = CAMERA_DISTANCE * 5;
 /** Depth steps smaller than this many art pixels are surface slope, not a silhouette. */

@@ -4,7 +4,7 @@ import { LOOK_ID } from '../look';
 const DEFINES = `#define LOOK ${LOOK_ID}\n`;
 
 /** Where sunlight comes from. The lit shader and the shadow camera share it. */
-export const SUN = (LOOK_ID === 3 ? new Vector3(-0.62, 0.5, 0.42) : new Vector3(-0.4, 0.82, 0.48)).normalize();
+export const SUN = (LOOK_ID >= 3 ? new Vector3(-0.62, 0.5, 0.42) : new Vector3(-0.4, 0.82, 0.48)).normalize();
 
 // A 4x4 ordered-dither threshold for the current art pixel, in (0, 1).
 const BAYER = /* glsl */ `
@@ -239,7 +239,13 @@ void main() {
   // Sunlit ground throws a little warm light back up under things.
   vec3 bounce = vec3(0.30, 0.24, 0.16) * max(-n.y * 0.6 + 0.25, 0.) * (1. - abs(n.y));
   vec3 albedo = ${smooth ? 'vColor' : 'fineTexture(vColor, n, int(vSurface + 0.5))'};
-#if LOOK == 3
+#if LOOK == 4
+  // Cel light: the sun lands in three hard steps with a dithered edge, like shaded sprite art.
+  vec2 cell = mod(floor(gl_FragCoord.xy), 2.);
+  float bayer = (cell.x * 2. + cell.y * 3. - cell.x * cell.y * 4. + 0.5) / 4. - 0.5;
+  direct = floor(direct * 3. + 0.5 + bayer * 0.25) / 3.;
+#endif
+#if LOOK >= 3
   // Late sun: warm and strong, with dim blue-violet sky light filling the shade.
   sky = mix(vec3(0.20, 0.19, 0.34), vec3(0.36, 0.44, 0.70), n.y * 0.5 + 0.5);
   vec3 c = albedo * (sky * 0.62 + bounce * 1.3 + vec3(1.25, 0.92, 0.58) * 0.95 * direct);
@@ -394,7 +400,20 @@ vec4 inked(float side, vec2 screen) {
     max(depthAt(uv + vec2(0., texel.y) * w, lo, hi), depthAt(uv - vec2(0., texel.y) * w, lo, hi))
   );
   float outline = smoothstep(limit * 2., limit * 6., max(far, farWide) - d);
-#if LOOK == 3
+#if LOOK == 4
+  c.rgb *= mix(vec3(0.3, 0.26, 0.46), vec3(1.), floor(ao * 3. + 0.5) / 3.);
+  // A hard ink line a pixel wide round every silhouette, then a short palette: 9 steps a channel, dithered.
+  if (far - d > limit) c.rgb = mix(c.rgb, INK, 0.85);
+  c.rgb = c.rgb / (c.rgb + 0.85) * 1.72;
+  c.rgb = mix(c.rgb, c.rgb * c.rgb * (3. - 2. * c.rgb), 0.6);
+  float grey = dot(c.rgb, vec3(0.3, 0.59, 0.11));
+  c.rgb = mix(vec3(grey), c.rgb, 1.25);
+  vec2 cell = mod(floor(gl_FragCoord.xy), 2.);
+  float bayer = (cell.x * 2. + cell.y * 3. - cell.x * cell.y * 4. + 0.5) / 4. - 0.5;
+  c.rgb = floor(c.rgb * 12. + 0.5 + bayer * 0.3) / 12.;
+  c.rgb *= 1. - 0.5 * dot(screen - 0.5, screen - 0.5);
+  return c;
+#elif LOOK == 3
   c.rgb *= mix(vec3(0.28, 0.24, 0.42), vec3(1.), ao);
   c.rgb = mix(c.rgb, INK, outline * 0.55);
   // Filmic contrast, then a small palette: each channel snaps to 24 steps with ordered dither, so gradients band like painted pixel art.
