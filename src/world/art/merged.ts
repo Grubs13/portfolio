@@ -1,5 +1,6 @@
 import { type BufferGeometry, Color, CylinderGeometry, Euler, Float32BufferAttribute, Group, Matrix4, Mesh, Quaternion, Vector3 } from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+import { LOOK } from '../look';
 import { box, type Vec } from './kit';
 import { glowMaterial, litMaterial, smoothMaterial } from './materials';
 import type { Paint } from './palette';
@@ -99,7 +100,9 @@ export class MergedModel {
       if (parts.length === 0) continue;
       const merged = mergeGeometries(parts);
       if (!merged) throw new Error('Model parts have mismatched attributes');
-      g.add(new Mesh(merged, material));
+      // Prototype looks shade round shells smoothly: normals are averaged across edges shallower than the crease angle.
+      const shaded = LOOK !== 'pixel' && material !== glowMaterial && !this.smooth ? toCreasedNormals(merged, 0.75) : merged;
+      g.add(new Mesh(shaded, material));
     }
     return g;
   }

@@ -1,4 +1,7 @@
 import { Matrix4, ShaderMaterial, Vector2, Vector3 } from 'three';
+import { LOOK_ID } from '../look';
+
+const DEFINES = `#define LOOK ${LOOK_ID}\n`;
 
 /** Where sunlight comes from. The lit shader and the shadow camera share it. */
 export const SUN = new Vector3(-0.4, 0.82, 0.48).normalize();
@@ -19,9 +22,11 @@ varying float vSurface;
 varying vec3 vColor;
 varying vec3 vWorld;
 varying vec3 vShadow;
+varying vec3 vNormal;
 void main() {
   vColor = color;
   vSurface = surface;
+  vNormal = normalize(mat3(modelMatrix) * normal);
   vec4 world = modelMatrix * vec4(position, 1.);
   vWorld = world.xyz;
   vShadow = (shadowMatrix * world).xyz;
@@ -154,6 +159,95 @@ void main() {
 }
 `;
 
+
+// Prototype: continuous sun and sky light, soft shadows, a metal sheen and fine world-space texture.
+const fineFragment = (smooth: boolean) => /* glsl */ `
+${smooth ? '' : 'varying float vSurface;'}
+uniform vec3 sun;
+uniform sampler2D tShadow;
+uniform float shadowBias;
+uniform float shadowTexel;
+varying vec3 vColor;
+varying vec3 vWorld;
+varying vec3 vShadow;
+varying vec3 vNormal;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = smoothstep(0., 1., fract(p));
+  return mix(mix(hash(i), hash(i + vec2(1., 0.)), f.x), mix(hash(i + vec2(0., 1.)), hash(i + 1.), f.x), f.y);
+}
+float fbm(vec2 p) { return vnoise(p) * 0.5 + vnoise(p * 2.1 + 3.) * 0.3 + vnoise(p * 4.3 + 7.) * 0.2; }
+float softShadow() {
+  if (any(lessThan(vShadow, vec3(0.))) || any(greaterThan(vShadow, vec3(1.)))) return 1.;
+  float s = 0.;
+  for (int x = 0; x < 4; x++) for (int y = 0; y < 4; y++) {
+    vec2 o = (vec2(float(x), float(y)) - 1.5) * shadowTexel * 1.3;
+    s += vShadow.z - shadowBias > texture2D(tShadow, vShadow.xy + o).r ? 0. : 1.;
+  }
+  return s / 16.;
+}
+vec3 fineTexture(vec3 c, vec3 n, int kind) {
+  c *= 0.9 + 0.2 * fbm(vWorld.xz * 0.9 + vWorld.y * 0.6);
+  if (n.y > 0.9) {
+    vec2 p = vWorld.xz;
+    c *= 0.95 + 0.1 * hash(floor(p * 22.));
+    c *= 0.9 + 0.2 * fbm(p * 0.35);
+    if (kind == 4) {
+      float h = hash(floor(p * 26.));
+      c *= h > 0.9 ? 0.8 : h < 0.07 ? 1.08 : 1.;
+      c *= 0.96 + 0.06 * smoothstep(0.35, 0.65, fbm(vec2(p.x * 0.5, p.y * 3.)));
+    } else if (kind == 5) {
+      c *= 0.84 + 0.3 * hash(floor(p * vec2(34., 14.)));
+      c = mix(c, c * vec3(1.12, 1.06, 0.78), smoothstep(0.4, 0.7, fbm(p * 0.22)));
+    } else if (kind == 6) {
+      float r = sin(p.y * 7. + sin(p.x * 1.7) * 2. + fbm(p * 0.8) * 6.);
+      c = c * (0.82 + 0.2 * fbm(p * 0.3)) + 0.1 * smoothstep(0.82, 1., r);
+    } else if (kind == 7) {
+      vec2 j = abs(fract(p * 0.25) - 0.5);
+      c *= 1. - 0.16 * (1. - smoothstep(0.485, 0.497, max(j.x, j.y)) ) * 0. - 0.14 * smoothstep(0.487, 0.497, max(j.x, j.y));
+      c *= 0.86 + 0.2 * fbm(p * 1.1);
+    }
+    return c;
+  }
+  if (abs(n.y) > 0.5) return c;
+  float u = dot(vWorld.xz, normalize(vec2(-n.z, n.x) + 1e-5));
+  float v = vWorld.y;
+  // Grime running down every wall.
+  c *= 0.84 + 0.22 * fbm(vec2(u * 4.5, v * 0.45));
+  if (kind == 1) {
+    c *= 0.84 + 0.16 * smoothstep(0.0, 0.5, abs(fract(u * 3.) - 0.5) * 2.);
+    c *= 1. - 0.14 * (1. - smoothstep(0., 0.04, fract(v * 0.22)));
+  } else if (kind == 2) {
+    float seam = min(fract(u / 1.4), fract(v / 1.1));
+    c *= 1. - 0.24 * (1. - smoothstep(0.0, 0.05, seam));
+    float streak = fbm(vec2(u * 3.2, v * 0.35)) * fbm(vec2(u * 0.9, v * 0.9 + 3.));
+    c = mix(c, c * vec3(0.74, 0.52, 0.4), smoothstep(0.22, 0.42, streak));
+  } else if (kind == 3) {
+    float course = floor(v / 1.5);
+    c *= 1. - 0.16 * (1. - smoothstep(0., 0.035, fract(v / 1.5)));
+    c *= 1. - 0.1 * (1. - smoothstep(0., 0.015, fract(u / 2.2 + course * 0.5)));
+  }
+  return c;
+}
+void main() {
+  vec3 n = normalize(vNormal);
+  if (dot(n, n) < 0.5) n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
+  float ndl = dot(n, sun);
+  float direct = max(ndl, 0.) * softShadow();
+  vec3 sky = mix(vec3(0.40, 0.36, 0.50), vec3(0.60, 0.68, 0.88), n.y * 0.5 + 0.5);
+  // Sunlit ground throws a little warm light back up under things.
+  vec3 bounce = vec3(0.30, 0.24, 0.16) * max(-n.y * 0.6 + 0.25, 0.) * (1. - abs(n.y));
+  vec3 albedo = ${smooth ? 'vColor' : 'fineTexture(vColor, n, int(vSurface + 0.5))'};
+  vec3 c = albedo * (sky * 0.68 + bounce + vec3(1.0, 0.9, 0.72) * 0.7 * direct);
+  vec3 h = normalize(sun + vec3(0.577));
+  c += vec3(1., 0.95, 0.85) * pow(max(dot(n, h), 0.), 48.) * 0.22 * direct;
+  gl_FragColor = vec4(c, 1.);
+}
+`;
+
+const fragmentFor = (smooth: boolean) => DEFINES + (LOOK_ID > 0 ? fineFragment(smooth) : litFragment(smooth));
+
 const glowFragment = /* glsl */ `
 varying vec3 vColor;
 void main() { gl_FragColor = vec4(vColor, 1.); }
@@ -165,19 +259,20 @@ export const shadowUniforms = {
   tShadow: { value: null as unknown },
   shadowMatrix: { value: new Matrix4() },
   shadowBias: { value: 0 },
+  shadowTexel: { value: 1 / 1024 },
 };
 
 export const litMaterial = new ShaderMaterial({
   uniforms: shadowUniforms,
   vertexShader,
-  fragmentShader: litFragment(false),
+  fragmentShader: fragmentFor(false),
   vertexColors: true,
 });
 /** The lit shading for characters: smooth normals, no ground texture, and bones when the mesh has them. */
 export const smoothMaterial = new ShaderMaterial({
   uniforms: shadowUniforms,
   vertexShader: smoothVertexShader,
-  fragmentShader: litFragment(true),
+  fragmentShader: fragmentFor(true),
   vertexColors: true,
 });
 export const glowMaterial = new ShaderMaterial({
@@ -206,6 +301,9 @@ export const screenMaterial = new ShaderMaterial({
     extent: { value: new Vector2(0.5, 1) },
     threshold: { value: new Vector2() },
     progress: { value: 0 },
+    aoRadius: { value: new Vector2() },
+    depthRange: { value: 1 },
+    scale: { value: 1 },
   },
   vertexShader: /* glsl */ `
 varying vec2 vUv;
@@ -214,33 +312,113 @@ void main() {
   gl_Position = vec4(position.xy, 0., 1.);
 }
 `,
-  fragmentShader: /* glsl */ `
+  fragmentShader: DEFINES + /* glsl */ `
 uniform sampler2D tColor;
 uniform sampler2D tDepth;
 uniform vec2 texel;
 uniform vec2 extent;
 uniform vec2 threshold;
 uniform float progress;
+uniform vec2 aoRadius;
+uniform float depthRange;
+uniform float scale;
 varying vec2 vUv;
 const vec3 INK = vec3(0.07, 0.06, 0.16);
 // Depth at a neighbor, kept inside the scene's own region so the halves never ink each other's edges.
 float depthAt(vec2 uv, vec2 lo, vec2 hi) {
   return texture2D(tDepth, clamp(uv, lo, hi)).r;
 }
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = smoothstep(0., 1., fract(p));
+  return mix(mix(hash(i), hash(i + vec2(1., 0.)), f.x), mix(hash(i + vec2(0., 1.)), hash(i + 1.), f.x), f.y);
+}
+#if LOOK > 0
+// Creases and contact: how far the surface here sits behind the average of opposite neighbors, which is zero on any flat plane.
+vec2 hollow(vec2 uv, vec2 lo, vec2 hi, float d, float radius) {
+  float occ = 0.;
+  float crease = 0.;
+  float spin = hash(gl_FragCoord.xy) * 6.283;
+  for (int i = 0; i < 8; i++) {
+    float a = spin + float(i) * 0.785;
+    float r = radius * (0.25 + 0.75 * fract(float(i) * 0.618 + 0.3));
+    vec2 o = vec2(cos(a), sin(a)) * r * texel;
+    float gap = (d - 0.5 * (depthAt(uv + o, lo, hi) + depthAt(uv - o, lo, hi))) * depthRange;
+    occ += smoothstep(0.03, 0.5, gap) * (1. - smoothstep(0.8, 2., gap));
+    crease = max(crease, abs(gap));
+  }
+  return vec2(occ / 8., crease);
+}
+float hatch(vec2 p, float angle, float spacing) {
+  vec2 dir = vec2(cos(angle), sin(angle));
+  float wob = vnoise(p / (40. * scale)) * 6. * scale;
+  float t = abs(fract((dot(p, dir) + wob) / (spacing * scale)) - 0.5) * 2.;
+  return 1. - smoothstep(0.55, 0.8, t + (vnoise(p / (3. * scale)) - 0.5) * 0.5);
+}
+#endif
 // Scene A (side 0) or B (side 1) at a screen position, inked.
 vec4 inked(float side, vec2 screen) {
   vec2 origin = vec2(side * 0.5, 0.);
   vec2 lo = origin + texel * 0.5;
   vec2 hi = origin + extent - texel * 0.5;
   vec2 uv = origin + screen * extent;
+  float limit = side < 0.5 ? threshold.x : threshold.y;
+#if LOOK == 2
+  // A hand that wobbles: every lookup is nudged by slow noise, so lines waver like pencil.
+  uv += (vec2(vnoise(gl_FragCoord.xy / (9. * scale)), vnoise(gl_FragCoord.yx / (9. * scale) + 5.)) - 0.5) * 2.2 * scale * texel;
+#endif
   vec4 c = texture2D(tColor, uv);
   float d = texture2D(tDepth, uv).r;
   float far = max(
     max(depthAt(uv + vec2(texel.x, 0.), lo, hi), depthAt(uv - vec2(texel.x, 0.), lo, hi)),
     max(depthAt(uv + vec2(0., texel.y), lo, hi), depthAt(uv - vec2(0., texel.y), lo, hi))
   );
-  if (d < 1. && far - d > (side < 0.5 ? threshold.x : threshold.y)) c.rgb = mix(c.rgb, INK, 0.78);
+#if LOOK == 0
+  if (d < 1. && far - d > limit) c.rgb = mix(c.rgb, INK, 0.78);
   return c;
+#else
+  if (d >= 1.) return c;
+  vec2 h = hollow(uv, lo, hi, d, side < 0.5 ? aoRadius.x : aoRadius.y);
+  float ao = 1. - 0.7 * h.x;
+  // Wider lookups for the line, so it is a soft stroke about a CSS pixel wide.
+  float w = max(1., scale * 0.75);
+  float farWide = max(
+    max(depthAt(uv + vec2(texel.x, 0.) * w, lo, hi), depthAt(uv - vec2(texel.x, 0.) * w, lo, hi)),
+    max(depthAt(uv + vec2(0., texel.y) * w, lo, hi), depthAt(uv - vec2(0., texel.y) * w, lo, hi))
+  );
+  float outline = smoothstep(limit * 2., limit * 6., max(far, farWide) - d);
+#if LOOK == 1
+  c.rgb *= mix(vec3(0.42, 0.36, 0.5), vec3(1.), ao);
+  c.rgb = mix(c.rgb, c.rgb * 0.35, outline * 0.6);
+  // A gentle filmic curve and a touch of warmth in the lights.
+  c.rgb = c.rgb * (1.06 + vec3(0.03, 0.01, -0.03) * dot(c.rgb, vec3(0.33)));
+  c.rgb = c.rgb * c.rgb * (3. - 2. * c.rgb) * 0.45 + c.rgb * 0.55;
+  return c;
+#else
+  float lum = dot(c.rgb, vec3(0.3, 0.59, 0.11)) * (1. - 0.35 * h.x);
+  float dark = 1. - lum;
+  vec2 p = gl_FragCoord.xy;
+  vec3 paper = vec3(0.93, 0.9, 0.83) * (0.95 + 0.05 * vnoise(p / (2. * scale))) * (0.97 + 0.03 * vnoise(p / (60. * scale)));
+  // A light watercolor wash of the scene's own colors under the pencil.
+  vec3 wash = mix(vec3(lum), c.rgb, 0.75);
+  vec3 col = paper * mix(vec3(1.), 0.5 + 0.72 * wash, 0.7);
+  float pencil = 0.;
+  pencil = max(pencil, hatch(p, 0.7, 5.) * smoothstep(0.52, 0.66, dark));
+  pencil = max(pencil, hatch(p, -0.85, 5.5) * smoothstep(0.68, 0.8, dark));
+  pencil = max(pencil, hatch(p, 0.15, 4.) * smoothstep(0.82, 0.93, dark));
+  vec2 sx = vec2(texel.x, 0.) * w;
+  vec2 sy = vec2(0., texel.y) * w;
+  float bend = max(
+    abs(d - 0.5 * (depthAt(uv + sx, lo, hi) + depthAt(uv - sx, lo, hi))),
+    abs(d - 0.5 * (depthAt(uv + sy, lo, hi) + depthAt(uv - sy, lo, hi)))
+  );
+  float crease = smoothstep(limit * 0.25, limit * 0.8, bend) * 0.6;
+  float line = max(outline, crease) * (0.75 + 0.25 * vnoise(p / (4. * scale)));
+  col = mix(col, vec3(0.2, 0.19, 0.24), max(pencil * 0.38, line * 0.85));
+  return vec4(col, 1.);
+#endif
+#endif
 }
 const float BAYER[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
 void main() {
@@ -248,7 +426,7 @@ void main() {
     gl_FragColor = inked(0., vUv);
     return;
   }
-  ivec2 cell = ivec2(mod(floor(gl_FragCoord.xy / 3.), 4.));
+  ivec2 cell = ivec2(mod(floor(gl_FragCoord.xy / (3. * scale)), 4.));
   float dither = (BAYER[cell.x + cell.y * 4] + 0.5) / 16.;
   float along = vUv.y + (vUv.x - 0.5) * 0.3;
   float edge = progress * 1.54 - 0.22 + (dither - 0.5) * 0.14;

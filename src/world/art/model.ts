@@ -2,6 +2,8 @@ import { Box3, Color, Float32BufferAttribute, Group, Mesh, type MeshStandardMate
 import { buildCharacter, type Character, CHARACTER_POSES, type CharacterPose, CHARACTER_SCALE } from './character';
 import { litMaterial } from './materials';
 import { sceneLoader } from './sceneModel';
+import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+import { LOOK } from '../look';
 
 /**
  * A character modelled in Blender and exported as a GLB. Give each part a
@@ -31,7 +33,7 @@ function paintVertices(mesh: Mesh) {
   const material = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as MeshStandardMaterial | undefined;
   // glTF colors are linear and this world works in display space throughout.
   const { r, g, b } = new Color().copy(material?.color ?? new Color(1, 1, 1)).convertLinearToSRGB();
-  mesh.geometry = mesh.geometry.clone();
+  mesh.geometry = LOOK === 'pixel' ? mesh.geometry.clone() : toCreasedNormals(mesh.geometry, 1.0);
   const colors = new Float32Array(mesh.geometry.getAttribute('position').count * 3);
   for (let i = 0; i < colors.length; i += 3) colors.set([r, g, b], i);
   mesh.geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
